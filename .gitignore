@@ -1,0 +1,5 @@
+/.gradle
+/.idea
+/build
+/src/test/resources/*.exe
+/src/test/resources/*.s
