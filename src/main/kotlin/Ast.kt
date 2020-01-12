@@ -9,15 +9,23 @@ object Ast {
         }
     }
 
-    data class Function(val name: String, val statement: Statement) {
+    data class Function(val name: String, val statements: List<Statement>) {
         override fun toString(): String {
-            return "fun $name(): int = $statement"
+            return "fun $name(): int {\n\t${statements.joinToString("\n\t")}}\n"
         }
     }
 
     sealed class Statement {
         data class Return(val expression: Expression) : Statement() {
-            override fun toString() = "$expression"
+            override fun toString() = "return $expression\n"
+        }
+
+        data class Declare(val variableName: String, val expression: Expression?) : Statement() {
+            override fun toString() = "DECLARE $variableName = ${expression ?: "<undefined>"}\n"
+        }
+
+        data class ProxyExpression(val expression: Expression) : Statement() {
+            override fun toString() = "$expression\n"
         }
     }
 
@@ -38,6 +46,14 @@ object Ast {
         data class Nested(val expression: Expression) : Expression() {
             override fun toString() = "$expression"
         }
+
+        data class Assign(val variableName: String, val expression: Expression) : Expression() {
+            override fun toString() = "$variableName = $expression"
+        }
+
+        data class Variable(val variableName: String) : Expression() {
+            override fun toString() = variableName
+        }
     }
 
     fun parseProgram(tokens: Queue<Token>) = Program(parseFunction(tokens))
@@ -49,15 +65,29 @@ object Ast {
         assert(tokens.poll().type == Symbol.OPEN_BRACKETS)
         assert(tokens.poll().type == Symbol.CLOSE_BRACKETS)
         assert(tokens.poll().type == Symbol.OPEN_BRACE)
-        val function = Function(name.value, parseStatement(tokens))
+        val statements = mutableListOf<Statement>()
+        while (tokens.peek().type != Symbol.CLOSE_BRACE) {
+            statements.add(parseStatement(tokens))
+        }
         assert(tokens.poll().type == Symbol.CLOSE_BRACE)
         assert(tokens.isEmpty())
-        return function
+        return Function(name.value, statements)
     }
 
     private fun parseStatement(tokens: Queue<Token>): Statement {
-        assert(tokens.poll().type == Keyword.RETURN)
-        val statement = Statement.Return(parseExpression(tokens))
+        val token = tokens.poll()
+        val statement = when (token.type) {
+            Keyword.RETURN -> Statement.Return(parseExpression(tokens))
+            Keyword.INT -> {
+                val variableName = tokens.poll()
+                assert(variableName.type == IDENTIFIER)
+                val expression = if (tokens.peek().type == Symbol.ASSIGN) {
+                    parseExpression(tokens)
+                } else null
+                Statement.Declare(variableName.value, expression)
+            }
+            else -> Statement.ProxyExpression(parseExpression(tokens))
+        }
         assert(tokens.poll().type == Symbol.SEMICOLON)
         return statement
     }
@@ -65,6 +95,9 @@ object Ast {
     private fun parseExpression(tokens: Queue<Token>): Expression {
         val token = tokens.poll()
         var expression = when {
+            token.type == IDENTIFIER ->
+                if (tokens.poll().type == Symbol.ASSIGN) Expression.Assign(token.value, parseExpression(tokens))
+                else Expression.Variable(token.value)
             token.type == Literal.INT -> Expression.Constant(token.value)
             token.type.isUnary -> Expression.Unary(token, parseExpression(tokens))
             token.type == Symbol.OPEN_BRACKETS -> {
