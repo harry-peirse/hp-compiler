@@ -16,6 +16,9 @@ import java.util.stream.Stream
 class TestArgumentProvider : ArgumentsProvider {
     override fun provideArguments(context: ExtensionContext?): Stream<out Arguments> {
         return Stream.of(
+            Arguments.of(0, "int one() { return 1; } \nint main() { return 1 - one(); }"),
+            Arguments.of(2, "int plusOne(int i) { return i + 1; } \nint main() { return plusOne(1); }"),
+            Arguments.of(3, "int add(int a, int b) { return a + b; } \nint main() { return add(1, 2); }"),
             Arguments.of(8, "int main() { int a = 2; for(int i=0; i<2; i = i + 1) a = a *2; return a; }"),
             Arguments.of(8, "int main() { int a; for(a = 2; a<7; a = a+2) ; return a; }"),
             Arguments.of(2, "int main() { int a = 2; int b = 0; while(a>0) {b = b + 1; a = a - 1;} return b; }"),

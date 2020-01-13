@@ -2,15 +2,15 @@ package com.aal.hp
 
 import java.util.*
 
-data class Program(val functionDeclaration: Function) {
+data class Program(val functions: List<Function>) {
     fun prettyPrint(): String {
-        return functionDeclaration.prettyPrint()
+        return functions.joinToString("\n") { it.prettyPrint() }
     }
 }
 
-data class Function(val name: String, val blockItems: List<BlockItem>) {
+data class Function(val name: String, val arguments: List<String>, val blockItems: List<BlockItem>) {
     fun prettyPrint(): String {
-        return "fun $name(): int {\n\t${blockItems.joinToString("\n\t") { it.prettyPrint() }}\n}"
+        return "fun $name(${arguments.joinToString(", ") { "$it: int" }}): int {\n\t${blockItems.joinToString("\n\t") { it.prettyPrint() }}\n}"
     }
 }
 
@@ -128,17 +128,33 @@ sealed class Expression {
     object Empty : Expression() {
         override fun prettyPrint() = ""
     }
+
+    data class FunctionCall(val name: String, val arguments: List<Expression>) : Expression() {
+        override fun prettyPrint() = "$name(${arguments.joinToString(", ") { it.prettyPrint() }})"
+    }
 }
 
 class Ast {
 
-    fun parseProgram(tokens: Queue<Token>) = Program(parseFunction(tokens))
+    fun parseProgram(tokens: Queue<Token>): Program {
+        val functions = mutableListOf<Function>()
+        do {
+            functions.add(parseFunction(tokens))
+        } while (tokens.peek() != null)
+        return Program(functions)
+    }
 
     private fun parseFunction(tokens: Queue<Token>): Function {
         assert(tokens.poll().type == Keyword.INT)
         val name = tokens.poll()
         assert(name.type == IDENTIFIER)
         assert(tokens.poll().type == Symbol.OPEN_PARENTHESIS)
+        val arguments = mutableListOf<String>()
+        while (tokens.peek().type != Symbol.CLOSE_PARENTHESIS) {
+            assert(tokens.poll().type == Keyword.INT)
+            arguments.add(tokens.poll().value)
+            if (tokens.peek().type == Symbol.COMMA) tokens.poll()
+        }
         assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
         assert(tokens.poll().type == Symbol.OPEN_BRACE)
         val blockItems = mutableListOf<BlockItem>()
@@ -146,8 +162,7 @@ class Ast {
             blockItems.add(parseBlockItem(tokens))
         }
         assert(tokens.poll().type == Symbol.CLOSE_BRACE)
-        assert(tokens.isEmpty())
-        return Function(name.value, blockItems)
+        return Function(name.value, arguments, blockItems)
     }
 
     private fun parseBlockItem(tokens: Queue<Token>): BlockItem = when (tokens.peek().type) {
@@ -257,6 +272,15 @@ class Ast {
                 if (tokens.peek().type.isAssignment) {
                     val assignmentToken = tokens.poll()
                     Expression.Assign(token.value, assignmentToken, parseExpression(tokens))
+                } else if (tokens.peek().type == Symbol.OPEN_PARENTHESIS) {
+                    tokens.poll()
+                    val arguments = mutableListOf<Expression>()
+                    while (tokens.peek().type != Symbol.CLOSE_PARENTHESIS) {
+                        arguments.add(parseExpression(tokens))
+                        if (tokens.peek().type == Symbol.COMMA) tokens.poll()
+                    }
+                    assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
+                    Expression.FunctionCall(token.value, arguments)
                 } else Expression.Variable(token.value)
             }
             token.type == Literal.INT -> {

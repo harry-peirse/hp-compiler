@@ -2,7 +2,7 @@ package com.aal.hp
 
 class Generator {
 
-    fun generateProgram(program: Program) = FunctionGenerator().generateFunction(program.functionDeclaration) + "\n"
+    fun generateProgram(program: Program) = FunctionGenerator().generateFunction(program.functions[0]) + "\n"
 
     private inner class FunctionGenerator {
         fun generateFunction(function: Function): String {
@@ -142,6 +142,7 @@ class Generator {
                         |$label2:""".trimMargin()
                 }
                 is Expression.Empty -> ""
+                is Expression.FunctionCall -> "" // TODO
                 is Expression.Unary -> when (expression.unaryOp.type) {
                     Symbol.MINUS -> """${generateExpression(expression.expression)}
                         |  neg   %eax""".trimMargin()
