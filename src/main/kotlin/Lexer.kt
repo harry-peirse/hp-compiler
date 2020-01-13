@@ -146,7 +146,10 @@ class Lexer {
                 '\n' -> {
                     row++
                     col = 0
-                    token = null
+                    if(token != null) {
+                        tokens.add(token)
+                        token = null
+                    }
                 }
             }
             if (token != null) {

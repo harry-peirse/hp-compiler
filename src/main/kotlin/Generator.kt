@@ -2,11 +2,23 @@ package com.aal.hp
 
 class Generator {
 
-    fun generateProgram(program: Program) = FunctionGenerator().generateFunction(program.functions[0]) + "\n"
+    fun generateProgram(program: Program): String {
+        return program.functions.joinToString("\n") { FunctionGenerator().generateFunction(it) } + "\n"
+    }
 
     private inner class FunctionGenerator {
+
+        val variableMap = mutableMapOf<String, Int>()
+        val localScope = mutableSetOf<String>()
+        var argumentOffset: Int = 8
+
         fun generateFunction(function: Function): String {
-            val blockItemGenerator = BlockItemGenerator()
+            function.arguments.forEach {
+                variableMap[it] = argumentOffset
+                localScope.add(it)
+                argumentOffset += 4
+            }
+            val blockItemGenerator = BlockItemGenerator(variableMap, localScope)
             return """|  .globl _${function.name}
             |_${function.name}:
             |  push  %ebp
@@ -21,11 +33,11 @@ class Generator {
 
         private inner class BlockItemGenerator(
             val variableMap: MutableMap<String, Int> = mutableMapOf(),
+            val localScope: MutableSet<String> = mutableSetOf(),
             var stackIndex: Int = -4,
             var continueLabel: String? = null,
             var breakLabel: String? = null
         ) {
-            val localScope: MutableSet<String> = mutableSetOf()
             fun generateBlockItem(statement: BlockItem): String = when (statement) {
                 is BlockItem.Statement.Return -> """${generateExpression(statement.expression)}
                     |  movl  %ebp, %esp
@@ -54,7 +66,13 @@ class Generator {
                     }
                 is BlockItem.Statement.Compound -> {
                     val blockItemGenerator =
-                        BlockItemGenerator(variableMap.toMutableMap(), stackIndex, continueLabel, breakLabel)
+                        BlockItemGenerator(
+                            variableMap.toMutableMap(),
+                            mutableSetOf(),
+                            stackIndex,
+                            continueLabel,
+                            breakLabel
+                        )
                     """${statement.blockItems.map {
                         blockItemGenerator.generateBlockItem(it)
                     }.joinToString("\n")}
@@ -142,7 +160,10 @@ class Generator {
                         |$label2:""".trimMargin()
                 }
                 is Expression.Empty -> ""
-                is Expression.FunctionCall -> "" // TODO
+                is Expression.FunctionCall -> """${expression.arguments.reversed()
+                    .joinToString("\n") { "${generateExpression(it)}\n  pushl %eax" }}
+                    |  call  _${expression.name}
+                    |  addl  $${expression.arguments.size * 4},   %esp""".trimMargin()
                 is Expression.Unary -> when (expression.unaryOp.type) {
                     Symbol.MINUS -> """${generateExpression(expression.expression)}
                         |  neg   %eax""".trimMargin()

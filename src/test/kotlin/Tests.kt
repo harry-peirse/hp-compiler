@@ -12,10 +12,44 @@ import java.io.File
 import java.io.InputStreamReader
 import java.util.stream.Stream
 
-
 class TestArgumentProvider : ArgumentsProvider {
     override fun provideArguments(context: ExtensionContext?): Stream<out Arguments> {
         return Stream.of(
+            Arguments.of(
+                0, """
+                |int main() {
+                |    putchar(72);
+                |    putchar(101);
+                |    putchar(108);
+                |    putchar(108);
+                |    putchar(111);
+                |    putchar(44);
+                |    putchar(32);
+                |    putchar(87);
+                |    putchar(111);
+                |    putchar(114);
+                |    putchar(108);
+                |    putchar(100);
+                |    putchar(33);
+                |    putchar(10);
+                |    return 0;
+                |}""".trimMargin()
+            ),
+            Arguments.of(
+                55, """
+                |int fib(int n) {
+                |    if (n == 0 || n == 1) {
+                |        return n;
+                |    } else {
+                |        return fib(n - 1) + fib(n - 2);
+                |    }
+                |}
+                |
+                |int main() {
+                |    int n = 10;
+                |    return fib(n);
+                |}""".trimMargin()
+            ),
             Arguments.of(0, "int one() { return 1; } \nint main() { return 1 - one(); }"),
             Arguments.of(2, "int plusOne(int i) { return i + 1; } \nint main() { return plusOne(1); }"),
             Arguments.of(3, "int add(int a, int b) { return a + b; } \nint main() { return add(1, 2); }"),
@@ -23,8 +57,14 @@ class TestArgumentProvider : ArgumentsProvider {
             Arguments.of(8, "int main() { int a; for(a = 2; a<7; a = a+2) ; return a; }"),
             Arguments.of(2, "int main() { int a = 2; int b = 0; while(a>0) {b = b + 1; a = a - 1;} return b; }"),
             Arguments.of(2, "int main() { int a = 2; int b = 0; do {b = b + 1; a = a - 1;} while(a>0)  return b; }"),
-            Arguments.of(6, "int main() { int b = 0; for(int i = 0; i < 5; i = i + 1) { b = b + i; if(i>=3) break; } return b; }"),
-            Arguments.of(4, "int main() { int a = 0; for(int i = 0; i < 3; i = i + 1) { if(i / 2 == 1) continue; a = a + 2; } return a; }"),
+            Arguments.of(
+                6,
+                "int main() { int b = 0; for(int i = 0; i < 5; i = i + 1) { b = b + i; if(i>=3) break; } return b; }"
+            ),
+            Arguments.of(
+                4,
+                "int main() { int a = 0; for(int i = 0; i < 3; i = i + 1) { if(i / 2 == 1) continue; a = a + 2; } return a; }"
+            ),
             Arguments.of(3, "int main() { return 1 + 2; }"),
             Arguments.of(7, "int main() { return 1 + 2 * 3; }"),
             Arguments.of(13, "int main() { return 2 * 2 + 3 * 3; }"),
@@ -103,19 +143,31 @@ class Tests {
         File(assemblyFileName).writeText(assembly)
 
         File(executableFileName).takeIf { it.exists() }?.delete()
-        val processBuilder = ProcessBuilder("gcc", assemblyFileName, "-o", fileNameWithoutExtension)
-        processBuilder.redirectErrorStream(true)
-        val process1 = processBuilder.start()
-        val bufferedReader = BufferedReader(InputStreamReader(process1.inputStream))
-        var line = bufferedReader.readLine()
-        while (line != null) {
-            println(line)
-            line = bufferedReader.readLine()
+        val processBuilder1 = ProcessBuilder("gcc", assemblyFileName, "-o", fileNameWithoutExtension)
+        processBuilder1.redirectErrorStream(true)
+        val process1 = processBuilder1.start()
+        val bufferedReader1 = BufferedReader(InputStreamReader(process1.inputStream))
+        var line1 = bufferedReader1.readLine()
+        while (line1 != null) {
+            println(line1)
+            line1 = bufferedReader1.readLine()
         }
-        println("GCC: " + process1.waitFor())
-        val process2 = Runtime.getRuntime().exec("\"$executableFileName\"")
+        println("GCC exit status is ${process1.waitFor()}\n")
+
+        val processBuilder2 = ProcessBuilder(executableFileName)
+        processBuilder2.redirectErrorStream(true)
+
+        processBuilder2.redirectOutput(ProcessBuilder.Redirect.INHERIT)
+        val process2 = processBuilder2.start()
+        val bufferedReader2 = BufferedReader(InputStreamReader(process1.inputStream))
+        var line2 = bufferedReader2.readLine()
+        while (line2 != null) {
+            println(line2)
+            line2 = bufferedReader2.readLine()
+        }
+
         val status = process2.waitFor()
-        println("Output is: $status")
+        println("\nOutput is: $status\n")
         return status
     }
 }
