@@ -9,36 +9,46 @@ interface TokenType {
     val isUnary: Boolean
     val isBinary: Boolean
     val binaryPriority: Int
+    val isAssignment: Boolean
+    val isPostfix: Boolean
 }
 
 enum class Keyword(override val value: String) : TokenType {
     RETURN("return"),
-    INT("int");
+    INT("int"),
+    IF("if"),
+    ELSE("else");
 
     override val category = "Keyword"
     override val isBinary = false
     override val isUnary = false
     override val binaryPriority = -1
+    override val isAssignment: Boolean = false
+    override val isPostfix: Boolean = false
 }
 
 enum class Symbol(
     override val value: String,
     override val binaryPriority: Int = -1,
     override val isUnary: Boolean = false,
-    override val isBinary: Boolean = false
+    override val isBinary: Boolean = false,
+    override val isAssignment: Boolean = false,
+    override val isPostfix: Boolean = false
 ) : TokenType {
-    OPEN_BRACKETS("("),
-    CLOSE_BRACKETS(")"),
+    OPEN_PARENTHESIS("("),
+    CLOSE_PARENTHESIS(")"),
     OPEN_BRACE("{"),
     CLOSE_BRACE("}"),
-    OPEN_ARRAY("["),
-    CLOSE_ARRAY("]"),
+    OPEN_SQUARE_BRACKET("["),
+    CLOSE_SQUARE_BRACKET("]"),
+    SINGLE_QUOTE("'"),
+    DOUBLE_QUOTE("\""),
     SEMICOLON(";"),
     PERIOD("."),
     COMMA(","),
     ARROW("->"),
-    QUESTION_MARK("?"),
-    COLON(":"),
+    QUESTION_MARK("?", 13, isBinary = true),
+    COLON(":", 13, isBinary=true),
     MINUS("-", 4, isBinary = true, isUnary = true),
     TILDA("~", isUnary = true),
     BANG("!", isUnary = true),
@@ -51,7 +61,6 @@ enum class Symbol(
     BITWISE_SHIFT_LEFT("<<", 5, isBinary = true),
     BITWISE_SHIFT_RIGHT(">>", 5, isBinary = true),
     MODULUS("%", 3, isBinary = true, isUnary = true),
-    ASSIGN("="),//, 14, isBinary = true),
     AND("&&", 11, isBinary = true),
     OR("||", 12, isBinary = true),
     EQUAL("==", 7, isBinary = true),
@@ -60,18 +69,19 @@ enum class Symbol(
     LESS_THAN_OR_EQUAL_TO("<=", 6, isBinary = true),
     GREATER_THAN(">", 6, isBinary = true),
     GREATER_THAN_OR_EQUAL_TO(">=", 6, isBinary = true),
-    PLUS_ASSIGN("+="),//, 14, isBinary = true),
-    MINUS_ASSIGN("-="),//, 14, isBinary = true),
-    TIMES_ASSIGN("*="),//, 14, isBinary = true),
-    DIVIDE_ASSIGN("/="),//, 14, isBinary = true),
-    MODULUS_ASSIGN("%="),//, 14, isBinary = true),
-    BITWISE_SHIFT_LEFT_ASSIGN("<<="),//, 14, isBinary = true),
-    BITWISE_SHIFT_RIGHT_ASSIGN(">>="),//, 14, isBinary = true),
-    BITWISE_AND_ASSIGN("&="),//, 14, isBinary = true),
-    BITWISE_OR_ASSIGN("|="),//, 14, isBinary = true),
-    BITWISE_XOR_ASSIGN("^="),//, 14, isBinary = true),
-    INCREMENT("++", isUnary = true),
-    DECREMENT("--", isUnary = true);
+    ASSIGN("=", isAssignment = true),
+    PLUS_ASSIGN("+=", isAssignment = true),
+    MINUS_ASSIGN("-=", isAssignment = true),
+    TIMES_ASSIGN("*=", isAssignment = true),
+    DIVIDE_ASSIGN("/=", isAssignment = true),
+    MODULUS_ASSIGN("%=", isAssignment = true),
+    BITWISE_SHIFT_LEFT_ASSIGN("<<="),
+    BITWISE_SHIFT_RIGHT_ASSIGN(">>="),
+    BITWISE_AND_ASSIGN("&="),
+    BITWISE_OR_ASSIGN("|="),
+    BITWISE_XOR_ASSIGN("^="),
+    INCREMENT("++", isUnary = true, isPostfix = true),
+    DECREMENT("--", isUnary = true, isPostfix = true);
 
     override val category = "Symbol"
 }
@@ -84,6 +94,8 @@ enum class Literal() : TokenType {
     override val isBinary = false
     override val isUnary = false
     override val binaryPriority = -1
+    override val isAssignment: Boolean = false
+    override val isPostfix: Boolean = false
 }
 
 object IDENTIFIER : TokenType {
@@ -92,6 +104,8 @@ object IDENTIFIER : TokenType {
     override val isBinary = false
     override val isUnary = false
     override val binaryPriority = -1
+    override val isAssignment: Boolean = false
+    override val isPostfix: Boolean = false
 
     override fun toString() = "IDENTIFIER"
 }
@@ -103,10 +117,10 @@ data class Token(
     val type: TokenType,
     val value: String
 ) {
-    override fun toString() = "%5d (%3d, %3d) %10s %-17s : %s".format(pos, row, col, type.category, type, value)
+    fun prettyPrint() = "%5d (%3d, %3d) %10s %-17s : %s".format(pos, row, col, type.category, type, value)
 }
 
-object Lexer {
+class Lexer {
     private fun isKeyword(value: String) = Keyword.values().map { it.value }.contains(value)
     private fun isSymbol(value: String) = Symbol.values().map { it.value }.contains(value)
     private fun isIdentifier(value: String) = "^([a-z]|[A-Z]|_|\$)([a-z]|[A-Z]|[0-9]|_|\$)*$".toRegex().matches(value)

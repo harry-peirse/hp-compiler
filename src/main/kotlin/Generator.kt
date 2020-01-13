@@ -1,28 +1,44 @@
 package com.aal.hp
 
-object Generator {
+class Generator {
 
-    fun generateProgram(program: Ast.Program) = generateFunction(program.functionDeclaration)
+    fun generateProgram(program: Program) = generateFunction(program.functionDeclaration) + "\n"
 
-    private fun generateFunction(function: Ast.Function) = """|  .globl _${function.name}
+    private val variableMap = mutableMapOf<String, Int>()
+    private var stackIndex = -4
+
+    private fun generateFunction(function: Function) = """|  .globl _${function.name}
                 |_${function.name}:
-                |${function.statements.map { generateStatement(it) }.joinToString() }
+                |  push  %ebp
+                |  movl  %esp, %ebp
+                |${function.blockItems.map { generateBlockItem(it) }.joinToString("\n")}
                 """.trimMargin()
 
-    private fun generateStatement(statement: Ast.Statement) = when (statement) {
-        is Ast.Statement.Return -> """${generateExpression(statement.expression)}
+    private fun generateBlockItem(statement: BlockItem) = when (statement) {
+        is BlockItem.Statement.Return -> """${generateExpression(statement.expression)}
+                |  movl  %ebp, %esp
+                |  pop   %ebp
                 |  ret
                 """.trimMargin()
-        is Ast.Statement.ProxyExpression -> generateExpression(statement.expression)
-        is Ast.Statement.Declare -> "" //TODO
+        is BlockItem.Statement.ProxyExpression -> generateExpression(statement.expression)
+        is BlockItem.Statement.Conditional -> "" // TODO
+        is BlockItem.Declaration ->
+            if (variableMap.containsKey(statement.variableName)) throw IllegalStateException("Variable ${statement.variableName} is already declared!")
+            else {
+                variableMap[statement.variableName] = stackIndex
+                stackIndex -= 4
+                "${if (statement.expression != null) generateExpression(statement.expression) + "\n" else ""}  pushl %eax"
+            }
     }
 
-    private fun generateExpression(expression: Ast.Expression): String = when (expression) {
-        is Ast.Expression.Constant -> """  movl  $${expression.value},   %eax""".trimMargin()
-        is Ast.Expression.Assign -> "" //TODO
-        is Ast.Expression.Variable -> "" //TODO
-        is Ast.Expression.Nested -> generateExpression(expression.expression)
-        is Ast.Expression.Unary -> when (expression.unaryOp.type) {
+    private fun generateExpression(expression: Expression): String = when (expression) {
+        is Expression.Constant -> """  movl  $${expression.value},   %eax""".trimMargin()
+        is Expression.Assign -> """${generateExpression(expression.expression)}
+            |  movl  %eax, ${variableMap[expression.variableName]}(%ebp)""".trimMargin()
+        is Expression.Variable -> """  movl  ${variableMap[expression.variableName]}(%ebp), %eax""".trimMargin()
+        is Expression.Nested -> generateExpression(expression.expression)
+        is Expression.Conditional -> "" // TODO
+        is Expression.Unary -> when (expression.unaryOp.type) {
             Symbol.MINUS -> """${generateExpression(expression.expression)}
                 |  neg   %eax""".trimMargin()
             Symbol.TILDA -> """${generateExpression(expression.expression)}
@@ -33,7 +49,7 @@ object Generator {
                 |  sete  %al""".trimMargin()
             else -> throw IllegalStateException()
         }
-        is Ast.Expression.Binary -> when (expression.binaryOp.type) {
+        is Expression.Binary -> when (expression.binaryOp.type) {
             Symbol.PLUS -> """${generateExpression(expression.firstExpression)}
                 |  push  %eax
                 |${generateExpression(expression.secondExpression)}
