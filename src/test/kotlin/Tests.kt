@@ -36,9 +36,9 @@ class TestArgumentProvider : ArgumentsProvider {
             Arguments.of(2, "int main() { int a = 1; a = 2; return a; }"),
             Arguments.of(4, "int main() { int a; a = 4; return a; }"),
             Arguments.of(1, "int main() { int a = 2; if(a > 1) a = 1; return a; }"),
-            Arguments.of(4, "int main() { int a; if(0) a = 1; else a = 2; return a; }"),
+            Arguments.of(2, "int main() { int a; if(0) a = 1; else a = 2; return a; }"),
             Arguments.of(3, "int main() { return 0 || 1 ? 3 : 5; }"),
-            Arguments.of(3, "int main() { return 0 || 1 && 2 ? 3 + 5 * 12 : 5 / 3 * (1 + 2); }")
+            Arguments.of(63, "int main() { return 0 || 1 && 2 ? 3 + 5 * 12 : 5 / 3 * (1 + 2); }")
         )
     }
 }

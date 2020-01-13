@@ -67,10 +67,10 @@ sealed class Expression {
         override fun prettyPrint() = variableName
     }
 
-    data class Conditional(val condition: Expression, val expression: Expression, val elseExpression: Expression?) :
+    data class Conditional(val condition: Expression, val expression: Expression, val elseExpression: Expression) :
         Expression() {
         override fun prettyPrint() =
-            "IF ${condition.prettyPrint()} THEN ${expression.prettyPrint()}${if (elseExpression != null) " ELSE ${elseExpression.prettyPrint()}" else ""}"
+            "IF ${condition.prettyPrint()} THEN ${expression.prettyPrint()} ELSE ${elseExpression.prettyPrint()}"
     }
 }
 

@@ -14,14 +14,34 @@ class Generator {
                 |${function.blockItems.map { generateBlockItem(it) }.joinToString("\n")}
                 """.trimMargin()
 
-    private fun generateBlockItem(statement: BlockItem) = when (statement) {
+    private fun generateBlockItem(statement: BlockItem): String = when (statement) {
         is BlockItem.Statement.Return -> """${generateExpression(statement.expression)}
                 |  movl  %ebp, %esp
                 |  pop   %ebp
                 |  ret
                 """.trimMargin()
         is BlockItem.Statement.ProxyExpression -> generateExpression(statement.expression)
-        is BlockItem.Statement.Conditional -> "" // TODO
+        is BlockItem.Statement.Conditional -> if (statement.elseStatement != null) {
+            val label1 = generateLabel("if")
+            val label2 = generateLabel("else")
+            """${generateExpression(statement.condition)}
+                |  cmpl  $0,   %eax
+                |  je    $label1
+                |${generateBlockItem(statement.statement)}
+                |  jmp   $label2
+                |$label1:
+                |${generateBlockItem(statement.elseStatement)}
+                |$label2:
+            """.trimMargin()
+        } else {
+            val label1 = generateLabel("if")
+            """${generateExpression(statement.condition)}
+                |  cmpl  $0,   %eax
+                |  je    $label1
+                |${generateBlockItem(statement.statement)}
+                |$label1:
+            """.trimMargin()
+        }
         is BlockItem.Declaration ->
             if (variableMap.containsKey(statement.variableName)) throw IllegalStateException("Variable ${statement.variableName} is already declared!")
             else {
@@ -37,7 +57,19 @@ class Generator {
             |  movl  %eax, ${variableMap[expression.variableName]}(%ebp)""".trimMargin()
         is Expression.Variable -> """  movl  ${variableMap[expression.variableName]}(%ebp), %eax""".trimMargin()
         is Expression.Nested -> generateExpression(expression.expression)
-        is Expression.Conditional -> "" // TODO
+        is Expression.Conditional -> {
+            val label1 = generateLabel("if")
+            val label2 = generateLabel("else")
+            """${generateExpression(expression.condition)}
+                |  cmpl  $0,   %eax
+                |  je    $label1
+                |${generateExpression(expression.expression)}
+                |  jmp   $label2
+                |$label1:
+                |${generateExpression(expression.elseExpression)}
+                |$label2:
+            """.trimMargin()
+        }
         is Expression.Unary -> when (expression.unaryOp.type) {
             Symbol.MINUS -> """${generateExpression(expression.expression)}
                 |  neg   %eax""".trimMargin()
@@ -116,8 +148,8 @@ class Generator {
                 |  movl  $0,   %eax
                 |  setge %al""".trimMargin()
             Symbol.OR -> {
-                val label1 = generateLabel()
-                val label2 = generateLabel()
+                val label1 = generateLabel("or1_")
+                val label2 = generateLabel("or2_")
                 """${generateExpression(expression.firstExpression)}
                 |  cmpl  $0,   %eax
                 |  je    $label1
@@ -131,8 +163,8 @@ class Generator {
                 |$label2:""".trimMargin()
             }
             Symbol.AND -> {
-                val label1 = generateLabel()
-                val label2 = generateLabel()
+                val label1 = generateLabel("and1_")
+                val label2 = generateLabel("and2_")
                 """${generateExpression(expression.firstExpression)}
                 |  cmpl  $0,   %eax
                 |  jne   $label1
@@ -149,5 +181,5 @@ class Generator {
     }
 
     private var int: Int = 0
-    private fun generateLabel() = "_label_${int++}"
+    private fun generateLabel(prefix: String) = "_$prefix${int++}"
 }
