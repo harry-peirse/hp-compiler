@@ -17,7 +17,12 @@ enum class Keyword(override val value: String) : TokenType {
     RETURN("return"),
     INT("int"),
     IF("if"),
-    ELSE("else");
+    ELSE("else"),
+    FOR("for"),
+    DO("do"),
+    WHILE("while"),
+    BREAK("break"),
+    CONTINUE("continue");
 
     override val category = "Keyword"
     override val isBinary = false
