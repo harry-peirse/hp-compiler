@@ -25,6 +25,12 @@ class Generator {
 
             return """|  .globl ${function.name}
                 |${function.name}:
+                |  push  %r15  
+                |  push  %r14
+                |  push  %r13
+                |  push  %rbp
+                |  sub   $${32 + localScope.size * 8}, %rsp
+                |  mov   %rsp, %rbp
                 |${function.arguments.mapIndexed { index, _ ->
                 when (index) {
                     0 -> "  mov   %rcx,  8(%rsp)\n"
@@ -34,13 +40,7 @@ class Generator {
                     else -> "  pop   %rcx\n" +
                             "  mov   %rcx, ${8 + 8 * index}(%rsp)\n"
                 }
-            }.joinToString("")}  push  %r15
-                |  push  %r14
-                |  push  %r13
-                |  push  %rbp
-                |  mov   %rsp, %rbp
-                |  sub   $${32 + localScope.size * 8}, %rsp
-                |  lea   128(%rsp), %r13
+            }.joinToString("")}  lea   128(%rsp), %r13
                 |$content""".trimMargin()
         }
 
@@ -54,8 +54,8 @@ class Generator {
             fun generateBlockItem(statement: BlockItem): String = when (statement) {
                 is BlockItem.Statement.Return -> """${generateExpression(statement.expression)}
                     |  lea   -128(%r13), %rsp
-                    |  add   $${32 + localScope.size * 8}, %rsp
                     |  mov   %rbp, %rsp
+                    |  add   $${32 + localScope.size * 8}, %rsp
                     |  pop   %rbp
                     |  pop   %r13
                     |  pop   %r14
@@ -188,7 +188,7 @@ class Generator {
                     }
                 }.joinToString("\n")}
                     |  call  ${expression.name}
-                    """.trimMargin() // |  add   $${expression.arguments.size * BITS},   %rsp
+                    """.trimMargin() // |  add   $${expression.arguments.size * 8},   %rsp
                 is Expression.Unary -> when (expression.unaryOp.type) {
                     Symbol.MINUS -> """${generateExpression(expression.expression)}
                         |  neg   %rax""".trimMargin()
