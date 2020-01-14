@@ -21,24 +21,25 @@ import java.util.stream.Stream
 class TestArgumentProvider : ArgumentsProvider {
     override fun provideArguments(context: ExtensionContext?): Stream<out Arguments> {
         return Stream.of(
+            Arguments.of(2, "int main() { return 2; }"),
             Arguments.of(
                 0, """
                 |int main() {
-                |    putchar(72);
-                |    putchar(101);
-                |    putchar(108);
-                |    putchar(108);
-                |    putchar(111);
-                |    putchar(44);
-                |    putchar(32);
-                |    putchar(87);
-                |    putchar(111);
-                |    putchar(114);
-                |    putchar(108);
-                |    putchar(100);
-                |    putchar(33);
-                |    putchar(10);
-                |    return 0;
+                |   putchar(72);
+                |   putchar(101);
+                |   putchar(108);
+                |   putchar(108);
+                |   putchar(111);
+                |   putchar(44);
+                |   putchar(32);
+                |   putchar(87);
+                |   putchar(111);
+                |   putchar(114);
+                |   putchar(108);
+                |   putchar(100);
+                |   putchar(33);
+                |   putchar(10);
+                |   return 0;
                 |}""".trimMargin()
             ),
             Arguments.of(
@@ -53,9 +54,11 @@ class TestArgumentProvider : ArgumentsProvider {
                 |
                 |int main() {
                 |    int n = 10;
-                |    return fib(n);
+                |    return fib(10);
                 |}""".trimMargin()
             ),
+            Arguments.of(1, "int foo() { return 1; } int bar(){return foo();}int main() { return bar(); }"),
+            Arguments.of(1, "int bar(int a){return a;}int main() { return bar(1); }"),
             Arguments.of(0, "int one() { return 1; } \nint main() { return 1 - one(); }"),
             Arguments.of(2, "int plusOne(int i) { return i + 1; } \nint main() { return plusOne(1); }"),
             Arguments.of(3, "int add(int a, int b) { return a + b; } \nint main() { return add(1, 2); }"),
@@ -123,7 +126,9 @@ class Tests {
     @TestFactory
     fun testFiles(@TempDir tempDir: Path) = fileSource()?.map { file ->
         DynamicTest.dynamicTest(file.path) {
-            compileAndRun(file.path, tempDir)
+            val resultStatus = compileAndRun(file.path, tempDir)
+            val expectedStatus = file.path.split("_").last().split(".").first().toInt()
+            assertEquals(expectedStatus, resultStatus)
         }
     }
 
@@ -142,7 +147,8 @@ class Tests {
 
         val assembly = Generator().generateProgram(ast)
         println("Generated Assembly:")
-        println("$assembly\n")
+        var lineNumber = 1
+        println(assembly.split("\n").joinToString("\n") { "${lineNumber++}  $it" } + "\n")
 
         val fileNameWithoutExtension =
             outputPath.toString() + '\\' + filename.removeSuffix(".hp").split("\\").last().split("/").last()
@@ -154,7 +160,7 @@ class Tests {
         File(assemblyFileName).writeText(assembly)
 
         File(executableFileName).takeIf { it.exists() }?.delete()
-        val processBuilder1 = ProcessBuilder("gcc", assemblyFileName, "-o", fileNameWithoutExtension)
+        val processBuilder1 = ProcessBuilder("gcc", "-m64", "-g", assemblyFileName, "-o", fileNameWithoutExtension)
         processBuilder1.redirectErrorStream(true)
         val process1 = processBuilder1.start()
         val bufferedReader1 = BufferedReader(InputStreamReader(process1.inputStream))
@@ -179,6 +185,7 @@ class Tests {
 
         val status = process2.waitFor()
         println("\nOutput is: $status\n")
+
         return status
     }
 }

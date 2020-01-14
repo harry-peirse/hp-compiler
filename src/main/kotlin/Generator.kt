@@ -16,32 +16,50 @@ class Generator {
             function.arguments.forEach {
                 variableMap[it] = argumentOffset
                 localScope.add(it)
-                argumentOffset += 4
+                argumentOffset += 8
             }
             val blockItemGenerator = BlockItemGenerator(variableMap, localScope)
-            return """|  .globl _${function.name}
-            |_${function.name}:
-            |  push  %ebp
-            |  movl  %esp, %ebp
-            |${function.blockItems.map {
+            val content = function.blockItems.joinToString("\n") {
                 blockItemGenerator.generateBlockItem(it)
-            }.joinToString(
-                "\n"
-            )}
-            """.trimMargin()
+            }
+
+            return """|  .globl ${function.name}
+                |${function.name}:
+                |${function.arguments.mapIndexed { index, _ ->
+                when (index) {
+                    0 -> "  mov   %rcx,  8(%rsp)\n"
+                    1 -> "  mov   %rdx, 16(%rsp)\n"
+                    2 -> "  mov   %r8,  24(%rsp)\n"
+                    3 -> "  mov   %r9,  32(%rsp)\n"
+                    else -> "  pop   %rcx\n" +
+                            "  mov   %rcx, ${8 + 8 * index}(%rsp)\n"
+                }
+            }.joinToString("")}  push  %r15
+                |  push  %r14
+                |  push  %r13
+                |  push  %rbp
+                |  mov   %rsp, %rbp
+                |  sub   $${32 + localScope.size * 8}, %rsp
+                |  lea   128(%rsp), %r13
+                |$content""".trimMargin()
         }
 
         private inner class BlockItemGenerator(
             val variableMap: MutableMap<String, Int> = mutableMapOf(),
             val localScope: MutableSet<String> = mutableSetOf(),
-            var stackIndex: Int = -4,
+            var stackIndex: Int = -8,
             var continueLabel: String? = null,
             var breakLabel: String? = null
         ) {
             fun generateBlockItem(statement: BlockItem): String = when (statement) {
                 is BlockItem.Statement.Return -> """${generateExpression(statement.expression)}
-                    |  movl  %ebp, %esp
-                    |  pop   %ebp
+                    |  lea   -128(%r13), %rsp
+                    |  add   $${32 + localScope.size * 8}, %rsp
+                    |  mov   %rbp, %rsp
+                    |  pop   %rbp
+                    |  pop   %r13
+                    |  pop   %r14
+                    |  pop   %r15
                     |  ret""".trimMargin()
                 is BlockItem.Statement.ProxyExpression -> generateExpression(statement.expression)
                 is BlockItem.Statement.Conditional ->
@@ -49,7 +67,7 @@ class Generator {
                         val label1 = generateLabel("if_")
                         val label2 = generateLabel("else_")
                         """${generateExpression(statement.condition)}
-                            |  cmpl  $0,   %eax
+                            |  cmp   $0,   %rax
                             |  je    $label1
                             |${generateBlockItem(statement.statement)}
                             |  jmp   $label2
@@ -59,7 +77,7 @@ class Generator {
                     } else {
                         val label1 = generateLabel("if_")
                         """${generateExpression(statement.condition)}
-                            |  cmpl  $0,   %eax
+                            |  cmp   $0,   %rax
                             |  je    $label1
                             |${generateBlockItem(statement.statement)}
                             |$label1:""".trimMargin()
@@ -76,7 +94,7 @@ class Generator {
                     """${statement.blockItems.map {
                         blockItemGenerator.generateBlockItem(it)
                     }.joinToString("\n")}
-                        |  addl  $${blockItemGenerator.localScope.size * 4},   %esp""".trimMargin()
+                        |  add   $${blockItemGenerator.localScope.size * 8},   %rsp""".trimMargin()
                 }
                 is BlockItem.Statement.ForDeclaration -> {
                     continueLabel = generateLabel("for1_")
@@ -85,7 +103,7 @@ class Generator {
                     """${generateBlockItem(statement.declaration)}
                         |$label:
                         |${generateExpression(statement.condition)}
-                        |  cmpl  $0,   %eax
+                        |  cmp   $0,   %rax
                         |  je    $breakLabel
                         |${generateBlockItem(statement.statement)}
                         |$continueLabel:
@@ -100,7 +118,7 @@ class Generator {
                     """${generateExpression(statement.initialization)}
                         |$label:
                         |${generateExpression(statement.condition)}
-                        |  cmpl  $0,   %eax
+                        |  cmp   $0,   %rax
                         |  je    $breakLabel
                         |${generateBlockItem(statement.statement)}
                         |$continueLabel:
@@ -113,7 +131,7 @@ class Generator {
                     breakLabel = generateLabel("while2_")
                     """$continueLabel:
                         |${generateExpression(statement.condition)}
-                        |  cmpl  $0,   %eax
+                        |  cmp   $0,   %rax
                         |  je    $breakLabel
                         |${generateBlockItem(statement.statement)}
                         |  jmp   $continueLabel
@@ -125,7 +143,7 @@ class Generator {
                     """$continueLabel:
                         |${generateBlockItem(statement.statement)}
                         |${generateExpression(statement.condition)}
-                        |  cmpl  $0,   %eax
+                        |  cmp   $0,   %rax
                         |  jne   $continueLabel
                         |$breakLabel:""".trimMargin()
                 }
@@ -136,22 +154,22 @@ class Generator {
                     else {
                         variableMap[statement.variableName] = stackIndex
                         localScope.add(statement.variableName)
-                        stackIndex -= 4
-                        "${if (statement.expression != null) generateExpression(statement.expression) + "\n" else ""}  pushl %eax"
+                        stackIndex -= 8
+                        "${if (statement.expression != null) generateExpression(statement.expression) + "\n" else ""}  push  %rax"
                     }
             }
 
             private fun generateExpression(expression: Expression): String = when (expression) {
-                is Expression.Constant -> """|  movl  $${expression.value},   %eax""".trimMargin()
+                is Expression.Constant -> "  mov   $${expression.value},   %rax"
                 is Expression.Assign -> """${generateExpression(expression.expression)}
-                    |  movl  %eax, ${variableMap[expression.variableName]}(%ebp)""".trimMargin()
-                is Expression.Variable -> """|  movl  ${variableMap[expression.variableName]}(%ebp), %eax""".trimMargin()
+                    |  mov   %rax, ${variableMap[expression.variableName]}(%rbp)""".trimMargin()
+                is Expression.Variable -> "  mov   ${variableMap[expression.variableName]}(%rbp), %rax"
                 is Expression.Nested -> generateExpression(expression.expression)
                 is Expression.Conditional -> {
                     val label1 = generateLabel("if_")
                     val label2 = generateLabel("else_")
                     """${generateExpression(expression.condition)}
-                        |  cmpl  $0,   %eax
+                        |  cmp   $0,   %rax
                         |  je    $label1
                         |${generateExpression(expression.expression)}
                         |  jmp   $label2
@@ -160,99 +178,106 @@ class Generator {
                         |$label2:""".trimMargin()
                 }
                 is Expression.Empty -> ""
-                is Expression.FunctionCall -> """${expression.arguments.reversed()
-                    .joinToString("\n") { "${generateExpression(it)}\n  pushl %eax" }}
-                    |  call  _${expression.name}
-                    |  addl  $${expression.arguments.size * 4},   %esp""".trimMargin()
+                is Expression.FunctionCall -> """${expression.arguments.mapIndexed { index, it ->
+                    when (index) {
+                        0 -> "${generateExpression(it)}\n  mov   %rax, %rcx"
+                        1 -> "${generateExpression(it)}\n  mov   %rax, %rdx"
+                        2 -> "${generateExpression(it)}\n  mov   %rax, %r8"
+                        3 -> "${generateExpression(it)}\n  mov   %rax, %r9"
+                        else -> "${generateExpression(it)}\n  push  %rax"
+                    }
+                }.joinToString("\n")}
+                    |  call  ${expression.name}
+                    """.trimMargin() // |  add   $${expression.arguments.size * BITS},   %rsp
                 is Expression.Unary -> when (expression.unaryOp.type) {
                     Symbol.MINUS -> """${generateExpression(expression.expression)}
-                        |  neg   %eax""".trimMargin()
+                        |  neg   %rax""".trimMargin()
                     Symbol.TILDA -> """${generateExpression(expression.expression)}
-                        |  not   %eax""".trimMargin()
+                        |  not   %rax""".trimMargin()
                     Symbol.BANG -> """${generateExpression(expression.expression)}
-                        |  cmpl  $0,   %eax
-                        |  movl  $0,   %eax
+                        |  cmp   $0,   %rax
+                        |  mov   $0,   %rax
                         |  sete  %al""".trimMargin()
                     else -> throw IllegalStateException()
                 }
                 is Expression.Binary -> when (expression.binaryOp.type) {
                     Symbol.PLUS -> """${generateExpression(expression.firstExpression)}
-                        |  push  %eax
+                        |  push  %rax
                         |${generateExpression(expression.secondExpression)}
-                        |  pop   %ecx
-                        |  addl  %ecx, %eax""".trimMargin()
+                        |  pop   %rcx
+                        |  add   %rcx, %rax""".trimMargin()
                     Symbol.MINUS -> """${generateExpression(expression.firstExpression)}
-                        |  push  %eax
+                        |  push  %rax
                         |${generateExpression(expression.secondExpression)}
-                        |  pop   %ecx
-                        |  subl  %eax, %ecx
-                        |  movl  %ecx, %eax""".trimMargin()
+                        |  pop   %rcx
+                        |  sub   %rax, %rcx
+                        |  mov   %rcx, %rax""".trimMargin()
                     Symbol.ASTERISK -> """${generateExpression(expression.firstExpression)}
-                        |  push  %eax
+                        |  push  %rax
                         |${generateExpression(expression.secondExpression)}
-                        |  pop   %ecx
-                        |  imul  %ecx, %eax""".trimMargin()
+                        |  pop   %rcx
+                        |  imul  %rcx, %rax""".trimMargin()
                     Symbol.SLASH -> """${generateExpression(expression.firstExpression)}
-                        |  push  %eax
+                        |  push  %rax
                         |${generateExpression(expression.secondExpression)}
-                        |  movl  %eax, %ecx
-                        |  pop   %eax
+                        |  mov   %rax, %rcx
+                        |  pop   %rax
                         |  cdq
-                        |  idivl %ecx""".trimMargin()
+                        |  idiv  %rcx""".trimMargin()
                     Symbol.EQUAL -> """${generateExpression(expression.firstExpression)}
-                        |  push  %eax
+                        |  push  %rax
                         |${generateExpression(expression.secondExpression)}
-                        |  pop   %ecx
-                        |  cmpl  %eax, %ecx
-                        |  movl  $0,   %eax
+                        |  pop   %rcx
+                        |  cmp   %rax, %rcx
+                        |  mov   $0,   %rax
                         |  sete  %al""".trimMargin()
                     Symbol.NOT_EQUAL -> """${generateExpression(expression.firstExpression)}
-                        |  push  %eax
+                        |  push  %rax
                         |${generateExpression(expression.secondExpression)}
-                        |  pop   %ecx
-                        |  cmpl  %eax, %ecx
-                        |  movl  $0,   %eax
+                        |  pop   %rcx
+                        |  cmp   %rax, %rcx
+                        |  mov   $0,   %rax
                         |  setne %al""".trimMargin()
                     Symbol.LESS_THAN -> """${generateExpression(expression.firstExpression)}
-                        |  push  %eax
+                        |  push  %rax
                         |${generateExpression(expression.secondExpression)}
-                        |  pop   %ecx
-                        |  cmpl  %eax, %ecx
-                        |  movl  $0,   %eax
+                        |  pop   %rcx
+                        |  cmp   %rax, %rcx
+                        |  mov   $0,   %rax
                         |  setl  %al""".trimMargin()
                     Symbol.LESS_THAN_OR_EQUAL_TO -> """${generateExpression(expression.firstExpression)}
-                        |  push  %eax
+                        |  push  %rax
                         |${generateExpression(expression.secondExpression)}
-                        |  pop   %ecx
-                        |  cmpl  %eax, %ecx
-                        |  movl  $0,   %eax
+                        |  pop   %rcx
+                        |  cmp   %rax, %rcx
+                        |  mov   $0,   %rax
                         |  setle %al""".trimMargin()
                     Symbol.GREATER_THAN -> """${generateExpression(expression.firstExpression)}
-                        |  push  %eax
+                        |  push  %rax
                         |${generateExpression(expression.secondExpression)}
-                        |  pop   %ecx
-                        |  cmpl  %eax, %ecx
-                        |  movl  $0,   %eax
+                        |  pop   %rcx
+                        |  cmp   %rax, %rcx
+                        |  mov   $0,   %rax
                         |  setg  %al""".trimMargin()
                     Symbol.GREATER_THAN_OR_EQUAL_TO -> """${generateExpression(expression.firstExpression)}
-                        |  push  %eax
+                        |  push  %rax
                         |${generateExpression(expression.secondExpression)}
-                        |  pop   %ecx
-                        |  cmpl  %eax, %ecx
-                        |  movl  $0,   %eax
+                        |  pop   %rcx
+                        |  cmp   %rax, %rcx
+                        |  mov   $0,   %rax
                         |  setge %al""".trimMargin()
                     Symbol.OR -> {
                         val label1 = generateLabel("or1_")
                         val label2 = generateLabel("or2_")
                         """${generateExpression(expression.firstExpression)}
-                            |  cmpl  $0,   %eax
+                            |  cmp   $0,   %rax
                             |  je    $label1
-                            |  movl  $1,   %eax
+                            |  mov   $1,   %rax
                             |  jmp   $label2
                             |$label1:
                             |${generateExpression(expression.secondExpression)}
-                            |  cmpl  $0,   %eax
-                            |  movl  $0,   %eax
+                            |  cmp   $0,   %rax
+                            |  mov   $0,   %rax
                             |  setne %al
                             |$label2:""".trimMargin()
                     }
@@ -260,13 +285,13 @@ class Generator {
                         val label1 = generateLabel("and1_")
                         val label2 = generateLabel("and2_")
                         """${generateExpression(expression.firstExpression)}
-                            |  cmpl  $0,   %eax
+                            |  cmp   $0,   %rax
                             |  jne   $label1
                             |  jmp   $label2
                             |$label1:
                             |${generateExpression(expression.secondExpression)}
-                            |  cmpl  $0,   %eax
-                            |  movl  $0,   %eax
+                            |  cmp   $0,   %rax
+                            |  mov   $0,   %rax
                             |  setne %al
                             |$label2:""".trimMargin()
                     }
