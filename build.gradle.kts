@@ -19,6 +19,9 @@ tasks.test {
     testLogging {
         events("passed", "skipped", "failed")
     }
+    systemProperties(
+        "junit.jupiter.execution.parallel.enabled" to "true"
+    )
 }
 
 tasks {

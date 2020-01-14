@@ -2,7 +2,11 @@ package com.aal.hp
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.DynamicTest
+import org.junit.jupiter.api.TestFactory
 import org.junit.jupiter.api.extension.ExtensionContext
+import org.junit.jupiter.api.io.TempDir
+import org.junit.jupiter.api.parallel.Execution
+import org.junit.jupiter.api.parallel.ExecutionMode
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.ArgumentsProvider
@@ -10,6 +14,8 @@ import org.junit.jupiter.params.provider.ArgumentsSource
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
+import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.stream.Stream
 
 class TestArgumentProvider : ArgumentsProvider {
@@ -95,6 +101,9 @@ class TestArgumentProvider : ArgumentsProvider {
     }
 }
 
+val atomicInt = AtomicInteger(0)
+
+@Execution(ExecutionMode.CONCURRENT)
 class Tests {
 
     private fun fileSource() = File("./src/test/resources")
@@ -104,20 +113,21 @@ class Tests {
 
     @ParameterizedTest
     @ArgumentsSource(TestArgumentProvider::class)
-    fun testParameters(expectedOutput: Int, inputString: String) {
-        File("./build/test.hp").writeText(inputString)
-        val output = compileAndRun("./build/test.hp")
+    fun testParameters(expectedOutput: Int, inputString: String, @TempDir tempDir: Path) {
+        val int = atomicInt.incrementAndGet()
+        File("./build/test$int.hp").writeText(inputString)
+        val output = compileAndRun("./build/test$int.hp", tempDir)
         assertEquals(expectedOutput, output)
     }
 
-    //    @TestFactory
-    fun testFiles() = fileSource()?.map { file ->
+    @TestFactory
+    fun testFiles(@TempDir tempDir: Path) = fileSource()?.map { file ->
         DynamicTest.dynamicTest(file.path) {
-            compileAndRun(file.path)
+            compileAndRun(file.path, tempDir)
         }
     }
 
-    private fun compileAndRun(filename: String): Int {
+    private fun compileAndRun(filename: String, outputPath: Path): Int {
         println("Program input:")
         println(File(filename).readText() + "\n")
 
@@ -134,7 +144,8 @@ class Tests {
         println("Generated Assembly:")
         println("$assembly\n")
 
-        val fileNameWithoutExtension = filename.removeSuffix(".hp")
+        val fileNameWithoutExtension =
+            outputPath.toString() + '\\' + filename.removeSuffix(".hp").split("\\").last().split("/").last()
         val assemblyFileName = "$fileNameWithoutExtension.s"
         val executableFileName = "$fileNameWithoutExtension.exe"
         println(executableFileName)
