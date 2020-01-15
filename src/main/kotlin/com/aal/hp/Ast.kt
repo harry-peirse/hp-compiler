@@ -2,159 +2,166 @@ package com.aal.hp
 
 import java.util.*
 
-data class Program(val functions: List<Function>) {
-    fun prettyPrint() = functions.joinToString("\n") { it.prettyPrint() }
-}
+import com.aal.hp.Code.*
 
-data class Argument(val name: String, val type: String) {
-    fun prettyPrint() = "$name: $type"
-}
+sealed class Code {
 
-data class Function(
-    val name: String,
-    val returnType: String,
-    val arguments: List<Argument>,
-    val blockItems: List<BlockItem>
-) {
-    fun prettyPrint() =
-        "FUNCTION $name(${arguments.joinToString(", ") { it.prettyPrint() }}): $returnType {\n\t${blockItems.joinToString("\n\t") { it.prettyPrint() }}\n}"
-}
+    data class Program(val functions: List<Function>): Code() {
+        fun prettyPrint() = functions.joinToString("\n") { it.prettyPrint() }
+    }
 
-sealed class BlockItem {
-    abstract fun prettyPrint(): String
-    sealed class Statement : BlockItem() {
-        data class Return(val expression: Expression) : Statement() {
-            override fun prettyPrint() = "RETURN ${expression.prettyPrint()}"
+    data class Argument(val name: String, val type: String): Code() {
+        fun prettyPrint() = "$name: $type"
+    }
+
+    data class Function(
+        val name: String,
+        val returnType: String,
+        val arguments: List<Argument>,
+        val blockItems: List<BlockItem>
+    ): Code() {
+        fun prettyPrint() =
+            "FUNCTION $name(${arguments.joinToString(", ") { it.prettyPrint() }}): $returnType {\n\t${blockItems.joinToString(
+                "\n\t"
+            ) { it.prettyPrint() }}\n}"
+    }
+
+    sealed class BlockItem: Code() {
+        abstract fun prettyPrint(): String
+        sealed class Statement : BlockItem() {
+            data class Return(val expression: Expression) : Statement() {
+                override fun prettyPrint() = "RETURN ${expression.prettyPrint()}"
+            }
+
+            data class ProxyExpression(val expression: Expression) : Statement() {
+                override fun prettyPrint() = expression.prettyPrint()
+            }
+
+            data class Conditional(val condition: Expression, val statement: Statement, val elseStatement: Statement?) :
+                Statement() {
+                override fun prettyPrint() =
+                    "IF ${condition.prettyPrint()} THEN ${statement.prettyPrint()}${if (elseStatement != null) " ELSE ${elseStatement.prettyPrint()}" else ""}"
+            }
+
+            data class Compound(val blockItems: List<BlockItem>) : Statement() {
+                override fun prettyPrint() = "{\n\t\t${blockItems.joinToString("\n\t\t") { it.prettyPrint() }}\n\t}"
+            }
+
+            data class For(
+                val initialization: Expression,
+                var condition: Expression,
+                val increment: Expression,
+                val statement: Statement
+            ) : Statement() {
+                init {
+                    if (condition == Expression.Empty) {
+                        condition = Expression.Constant("1", Literal.S64.value)
+                    }
+                }
+
+                override fun prettyPrint() =
+                    "FOR (${initialization.prettyPrint()} ; ${condition.prettyPrint()} ; ${increment.prettyPrint()}) ${statement.prettyPrint()}"
+            }
+
+            data class ForDeclaration(
+                val declaration: Declaration,
+                var condition: Expression,
+                val increment: Expression,
+                val statement: Statement
+            ) : Statement() {
+                init {
+                    if (condition == Expression.Empty) {
+                        condition = Expression.Constant("1", Literal.S64.value)
+                    }
+                }
+
+                override fun prettyPrint() =
+                    "FOR (${declaration.prettyPrint()} ; ${condition.prettyPrint()} ; ${increment.prettyPrint()}) ${statement.prettyPrint()}"
+            }
+
+            data class While(val condition: Expression, val statement: Statement) : Statement() {
+                override fun prettyPrint() = "WHILE ${condition.prettyPrint()} DO ${statement.prettyPrint()}"
+            }
+
+            data class DoWhile(val statement: Statement, val condition: Expression) : Statement() {
+                override fun prettyPrint() = "DO ${statement.prettyPrint()} WHILE ${condition.prettyPrint()}"
+            }
+
+            object Break : Statement() {
+                override fun prettyPrint() = "BREAK"
+            }
+
+            object Continue : Statement() {
+                override fun prettyPrint() = "CONTINUE"
+            }
         }
 
-        data class ProxyExpression(val expression: Expression) : Statement() {
+        data class Declaration(val variableName: String, val type: String, val expression: Expression?) : BlockItem() {
+            override fun prettyPrint() = "DECLARE $variableName: $type = ${expression?.prettyPrint() ?: "<undefined>"}"
+        }
+    }
+
+    sealed class Expression: Code() {
+        abstract fun prettyPrint(): String
+
+        data class Constant(val value: String, val type: String) : Expression() {
+            override fun prettyPrint() = "($value: $type)"
+        }
+
+        data class Cast(val string: String, val expression: Expression) : Expression() {
+            override fun prettyPrint() = "(CAST($string)${expression.prettyPrint()})"
+        }
+
+        data class Unary(val unaryOp: Token, val expression: Expression) : Expression() {
+            override fun prettyPrint() = "(${unaryOp.value}${expression.prettyPrint()})"
+        }
+
+        data class Binary(val binaryOp: Token, val firstExpression: Expression, val secondExpression: Expression) :
+            Expression() {
+            override fun prettyPrint() =
+                "(${firstExpression.prettyPrint()}${binaryOp.value}${secondExpression.prettyPrint()})"
+        }
+
+        data class Nested(val expression: Expression) : Expression() {
             override fun prettyPrint() = expression.prettyPrint()
         }
 
-        data class Conditional(val condition: Expression, val statement: Statement, val elseStatement: Statement?) :
-            Statement() {
+        data class Assign(val variableName: String, val assignmentToken: Token, val expression: Expression) :
+            Expression() {
+            override fun prettyPrint() = "$variableName${assignmentToken.value}${expression.prettyPrint()}"
+        }
+
+        data class Variable(val variableName: String) : Expression() {
+            override fun prettyPrint() = variableName
+        }
+
+        data class Conditional(val condition: Expression, val expression: Expression, val elseExpression: Expression) :
+            Expression() {
             override fun prettyPrint() =
-                "IF ${condition.prettyPrint()} THEN ${statement.prettyPrint()}${if (elseStatement != null) " ELSE ${elseStatement.prettyPrint()}" else ""}"
+                "IF ${condition.prettyPrint()} THEN ${expression.prettyPrint()} ELSE ${elseExpression.prettyPrint()}"
         }
 
-        data class Compound(val blockItems: List<BlockItem>) : Statement() {
-            override fun prettyPrint() = "{\n\t\t${blockItems.joinToString("\n\t\t") { it.prettyPrint() }}\n\t}"
+        object Empty : Expression() {
+            override fun prettyPrint() = ""
         }
 
-        data class For(
-            val initialization: Expression,
-            var condition: Expression,
-            val increment: Expression,
-            val statement: Statement
-        ) : Statement() {
-            init {
-                if (condition == Expression.Empty) {
-                    condition = Expression.Constant("1", Literal.S64.value)
-                }
-            }
-
-            override fun prettyPrint() =
-                "FOR (${initialization.prettyPrint()} ; ${condition.prettyPrint()} ; ${increment.prettyPrint()}) ${statement.prettyPrint()}"
+        data class FunctionCall(val name: String, val arguments: List<Expression>) : Expression() {
+            override fun prettyPrint() = "$name(${arguments.joinToString(", ") { it.prettyPrint() }})"
         }
-
-        data class ForDeclaration(
-            val declaration: Declaration,
-            var condition: Expression,
-            val increment: Expression,
-            val statement: Statement
-        ) : Statement() {
-            init {
-                if (condition == Expression.Empty) {
-                    condition = Expression.Constant("1", Literal.S64.value)
-                }
-            }
-
-            override fun prettyPrint() =
-                "FOR (${declaration.prettyPrint()} ; ${condition.prettyPrint()} ; ${increment.prettyPrint()}) ${statement.prettyPrint()}"
-        }
-
-        data class While(val condition: Expression, val statement: Statement) : Statement() {
-            override fun prettyPrint() = "WHILE ${condition.prettyPrint()} DO ${statement.prettyPrint()}"
-        }
-
-        data class DoWhile(val statement: Statement, val condition: Expression) : Statement() {
-            override fun prettyPrint() = "DO ${statement.prettyPrint()} WHILE ${condition.prettyPrint()}"
-        }
-
-        object Break : Statement() {
-            override fun prettyPrint() = "BREAK"
-        }
-
-        object Continue : Statement() {
-            override fun prettyPrint() = "CONTINUE"
-        }
-    }
-
-    data class Declaration(val variableName: String, val type: String, val expression: Expression?) : BlockItem() {
-        override fun prettyPrint() = "DECLARE $variableName: $type = ${expression?.prettyPrint() ?: "<undefined>"}"
-    }
-}
-
-sealed class Expression {
-    abstract fun prettyPrint(): String
-
-    data class Constant(val value: String, val type: String) : Expression() {
-        override fun prettyPrint() = "($value: $type)"
-    }
-
-    data class Cast(val string: String, val expression: Expression) : Expression() {
-        override fun prettyPrint() = "(CAST($string)${expression.prettyPrint()})"
-    }
-
-    data class Unary(val unaryOp: Token, val expression: Expression) : Expression() {
-        override fun prettyPrint() = "(${unaryOp.value}${expression.prettyPrint()})"
-    }
-
-    data class Binary(val binaryOp: Token, val firstExpression: Expression, val secondExpression: Expression) :
-        Expression() {
-        override fun prettyPrint() =
-            "(${firstExpression.prettyPrint()}${binaryOp.value}${secondExpression.prettyPrint()})"
-    }
-
-    data class Nested(val expression: Expression) : Expression() {
-        override fun prettyPrint() = expression.prettyPrint()
-    }
-
-    data class Assign(val variableName: String, val assignmentToken: Token, val expression: Expression) :
-        Expression() {
-        override fun prettyPrint() = "$variableName${assignmentToken.value}${expression.prettyPrint()}"
-    }
-
-    data class Variable(val variableName: String) : Expression() {
-        override fun prettyPrint() = variableName
-    }
-
-    data class Conditional(val condition: Expression, val expression: Expression, val elseExpression: Expression) :
-        Expression() {
-        override fun prettyPrint() =
-            "IF ${condition.prettyPrint()} THEN ${expression.prettyPrint()} ELSE ${elseExpression.prettyPrint()}"
-    }
-
-    object Empty : Expression() {
-        override fun prettyPrint() = ""
-    }
-
-    data class FunctionCall(val name: String, val arguments: List<Expression>) : Expression() {
-        override fun prettyPrint() = "$name(${arguments.joinToString(", ") { it.prettyPrint() }})"
     }
 }
 
 class Ast {
 
     fun parseProgram(tokens: Queue<Token>): Program {
-        val functions = mutableListOf<Function>()
+        val functions = mutableListOf<Code.Function>()
         do {
             functions.add(parseFunction(tokens))
         } while (tokens.size > 1)
         return Program(functions)
     }
 
-    private fun parseFunction(tokens: Queue<Token>): Function {
+    private fun parseFunction(tokens: Queue<Token>): Code.Function {
         val name = tokens.poll()
         assert(name.type == IDENTIFIER)
         assert(tokens.poll().type == Symbol.DOUBLE_COLON)

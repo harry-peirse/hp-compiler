@@ -1,4 +1,4 @@
-package com.aal.hp
+package com.aal.hp.x64.com.aal.hp.x64
 
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.DynamicTest
@@ -6,8 +6,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestFactory
 import org.junit.jupiter.api.extension.ExtensionContext
 import org.junit.jupiter.api.io.TempDir
-import org.junit.jupiter.api.parallel.Execution
-import org.junit.jupiter.api.parallel.ExecutionMode
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.ArgumentsProvider
@@ -18,6 +16,9 @@ import java.io.InputStreamReader
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.stream.Stream
+
+import com.aal.hp.*
+import com.aal.hp.x64.Generator
 
 class TestArgumentProvider : ArgumentsProvider {
     override fun provideArguments(context: ExtensionContext?): Stream<out Arguments> {

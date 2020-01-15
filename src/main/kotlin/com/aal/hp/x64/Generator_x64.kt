@@ -1,4 +1,7 @@
-package com.aal.hp
+package com.aal.hp.x64
+
+import com.aal.hp.*
+import com.aal.hp.Code.*
 
 class Generator {
 
@@ -12,7 +15,7 @@ class Generator {
         val localScope = mutableSetOf<String>()
         var argumentOffset: Int = 8
 
-        fun generateFunction(function: Function): String {
+        fun generateFunction(function: Code.Function): String {
             function.arguments.forEach {
                 variableMap[it.name] = argumentOffset
                 localScope.add(it.name)
