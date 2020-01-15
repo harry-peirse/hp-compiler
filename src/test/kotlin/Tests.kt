@@ -54,7 +54,7 @@ class TestArgumentProvider : ArgumentsProvider {
                 |
                 |int main() {
                 |    int n = 10;
-                |    return fib(10);
+                |    return fib(n);
                 |}""".trimMargin()
             ),
             Arguments.of(1, "int foo() { return 1; } int bar(){return foo();}int main() { return bar(); }"),

@@ -47,6 +47,7 @@ class Generator {
         private inner class BlockItemGenerator(
             val variableMap: MutableMap<String, Int> = mutableMapOf(),
             val localScope: MutableSet<String> = mutableSetOf(),
+            val parentCount: Int = 0,
             var stackIndex: Int = -8,
             var continueLabel: String? = null,
             var breakLabel: String? = null
@@ -55,7 +56,7 @@ class Generator {
                 is BlockItem.Statement.Return -> """${generateExpression(statement.expression)}
                     |  lea   -128(%r13), %rsp
                     |  mov   %rbp, %rsp
-                    |  add   $${32 + localScope.size * 8}, %rsp
+                    |  add   $${32 + (parentCount + localScope.size) * 8}, %rsp
                     |  pop   %rbp
                     |  pop   %r13
                     |  pop   %r14
@@ -87,6 +88,7 @@ class Generator {
                         BlockItemGenerator(
                             variableMap.toMutableMap(),
                             mutableSetOf(),
+                            localScope.size,
                             stackIndex,
                             continueLabel,
                             breakLabel
