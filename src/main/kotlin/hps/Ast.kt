@@ -1,16 +1,16 @@
 package hps
 
-import java.util.*
-
 import hps.Code.*
+import hps.Code.Function
+import java.util.*
 
 sealed class Code {
 
-    data class Program(val functions: List<Function>): Code() {
+    data class Program(val functions: List<Function>) : Code() {
         fun prettyPrint() = functions.joinToString("\n") { it.prettyPrint() }
     }
 
-    data class Argument(val name: String, val type: String): Code() {
+    data class Argument(val name: String, val type: String) : Code() {
         fun prettyPrint() = "$name: $type"
     }
 
@@ -19,14 +19,14 @@ sealed class Code {
         val returnType: String,
         val arguments: List<Argument>,
         val blockItems: List<BlockItem>
-    ): Code() {
+    ) : Code() {
         fun prettyPrint() =
             "FUNCTION $name(${arguments.joinToString(", ") { it.prettyPrint() }}): $returnType {\n\t${blockItems.joinToString(
                 "\n\t"
             ) { it.prettyPrint() }}\n}"
     }
 
-    sealed class BlockItem: Code() {
+    sealed class BlockItem : Code() {
         abstract fun prettyPrint(): String
         sealed class Statement : BlockItem() {
             data class Return(val expression: Expression) : Statement() {
@@ -101,7 +101,7 @@ sealed class Code {
         }
     }
 
-    sealed class Expression: Code() {
+    sealed class Expression : Code() {
         abstract fun prettyPrint(): String
 
         data class Constant(val value: String, val type: String) : Expression() {
@@ -112,8 +112,10 @@ sealed class Code {
             override fun prettyPrint() = "(CAST($string)${expression.prettyPrint()})"
         }
 
-        data class Unary(val unaryOp: Token, val expression: Expression) : Expression() {
-            override fun prettyPrint() = "(${unaryOp.value}${expression.prettyPrint()})"
+        data class Unary(val unaryOp: Token, val expression: Expression, val postfix: Boolean = false) : Expression() {
+            override fun prettyPrint() =
+                if (postfix) "(${expression.prettyPrint()}${unaryOp.value})"
+                else "(${unaryOp.value}${expression.prettyPrint()})"
         }
 
         data class Binary(val binaryOp: Token, val firstExpression: Expression, val secondExpression: Expression) :
@@ -314,19 +316,28 @@ class Ast {
         return when {
             token.type == IDENTIFIER -> {
                 tokens.poll()
-                if (tokens.peek().type.isAssignment) {
-                    val assignmentToken = tokens.poll()
-                    Expression.Assign(token.value, assignmentToken, parseExpression(tokens))
-                } else if (tokens.peek().type == Symbol.OPEN_PARENTHESIS) {
-                    tokens.poll()
-                    val arguments = mutableListOf<Expression>()
-                    while (tokens.peek().type != Symbol.CLOSE_PARENTHESIS) {
-                        arguments.add(parseExpression(tokens))
-                        if (tokens.peek().type == Symbol.COMMA) tokens.poll()
+                when {
+                    tokens.peek().type.isAssignment -> {
+                        val assignmentToken = tokens.poll()
+                        Expression.Assign(token.value, assignmentToken, parseExpression(tokens))
                     }
-                    assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
-                    Expression.FunctionCall(token.value, arguments)
-                } else Expression.Variable(token.value)
+                    tokens.peek().type == Symbol.OPEN_PARENTHESIS -> {
+                        tokens.poll()
+                        val arguments = mutableListOf<Expression>()
+                        while (tokens.peek().type != Symbol.CLOSE_PARENTHESIS) {
+                            arguments.add(parseExpression(tokens))
+                            if (tokens.peek().type == Symbol.COMMA) tokens.poll()
+                        }
+                        assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
+                        Expression.FunctionCall(token.value, arguments)
+                    }
+                    tokens.peek().type.isPostfix -> Expression.Unary(
+                        tokens.poll(),
+                        Expression.Variable(token.value),
+                        true
+                    )
+                    else -> Expression.Variable(token.value)
+                }
             }
             token.type is Literal -> {
                 tokens.poll()

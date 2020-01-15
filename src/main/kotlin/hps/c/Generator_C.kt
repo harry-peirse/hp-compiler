@@ -40,71 +40,76 @@ class Generator {
                 blockItemGenerator.generateBlockItem(it)
             }
 
-            return """${toCType(function.returnType)} ${function.name}(${function.arguments.joinToString(", ") {
-                "${toCType(
-                    it.type
-                )} ${it.name}"
-            }}) {
-                |$content
-                |}""".trimMargin()
+            return "${toCType(function.returnType)} ${function.name}(${function.arguments.joinToString(", ") {
+                "${toCType(it.type)} ${it.name}"
+            }})\n{\n$content\n}"
         }
 
         private inner class BlockItemGenerator(
             val variableMap: MutableMap<String, Int> = mutableMapOf(),
             val localScope: MutableSet<String> = mutableSetOf(),
-            val parentCount: Int = 0,
+            val depth: Int = 1,
             var stackIndex: Int = -8,
             var continueLabel: String? = null,
             var breakLabel: String? = null
         ) {
-            fun generateBlockItem(statement: BlockItem): String = when (statement) {
-                is BlockItem.Statement.Return -> "return ${generateExpression(statement.expression)};".trimMargin()
-                is BlockItem.Statement.ProxyExpression -> "${generateExpression(statement.expression)};"
+
+            val padding = "    ".repeat(depth)
+
+            fun generateBlockItem(statement: BlockItem, padding: String = this.padding): String = when (statement) {
+                is BlockItem.Statement.Return -> "${padding}return ${generateExpression(statement.expression)};"
+                is BlockItem.Statement.ProxyExpression -> "${padding}${generateExpression(statement.expression)};"
                 is BlockItem.Statement.Conditional ->
                     if (statement.elseStatement != null) {
-                        "if (${generateExpression(statement.condition)}) ${generateBlockItem(statement.statement)} else ${generateBlockItem(
-                            statement.elseStatement
+                        "${padding}if (${generateExpression(statement.condition)}) ${generateBlockItem(
+                            statement.statement,
+                            ""
+                        )}\n${padding}else ${generateBlockItem(
+                            statement.elseStatement, ""
                         )}"
                     } else {
-                        "if (${generateExpression(statement.condition)}) ${generateBlockItem(statement.statement)}"
+                        "${padding}if (${generateExpression(statement.condition)}) ${generateBlockItem(
+                            statement.statement,
+                            ""
+                        )}"
                     }
                 is BlockItem.Statement.Compound -> {
                     val blockItemGenerator =
                         BlockItemGenerator(
                             variableMap.toMutableMap(),
                             mutableSetOf(),
-                            localScope.size,
+                            depth + 1,
                             stackIndex,
                             continueLabel,
                             breakLabel
                         )
-                    """{
-                        |  ${statement.blockItems.map { blockItemGenerator.generateBlockItem(it) }.joinToString("\n")}
-                        |}""".trimMargin()
+                    "$padding{\n${statement.blockItems.map { blockItemGenerator.generateBlockItem(it) }.joinToString(
+                        "\n"
+                    )}\n$padding}"
                 }
                 is BlockItem.Statement.ForDeclaration ->
-                    "for (${generateBlockItem(statement.declaration)} ${generateExpression(statement.condition)}; ${generateExpression(
+                    "${padding}for (${generateBlockItem(statement.declaration).trim()} ${generateExpression(statement.condition)}; ${generateExpression(
                         statement.increment
-                    )}) ${generateBlockItem(statement.statement)}"
+                    )})\n${generateBlockItem(statement.statement)}"
                 is BlockItem.Statement.For ->
-                    "for (${generateExpression(statement.initialization)}; ${generateExpression(statement.condition)};  ${generateExpression(
+                    "${padding}for (${generateExpression(statement.initialization)}; ${generateExpression(statement.condition)};  ${generateExpression(
                         statement.increment
-                    )}) ${generateBlockItem(statement.statement)}"
-                is BlockItem.Statement.While -> "while (${generateExpression(statement.condition)}) ${generateBlockItem(
+                    )})\n${generateBlockItem(statement.statement)}"
+                is BlockItem.Statement.While -> "${padding}while (${generateExpression(statement.condition)})\n${generateBlockItem(
                     statement.statement
                 )}"
-                is BlockItem.Statement.DoWhile -> "do ${generateBlockItem(statement.statement)} while (${generateExpression(
+                is BlockItem.Statement.DoWhile -> "${padding}do ${generateBlockItem(statement.statement)} while (${generateExpression(
                     statement.condition
                 )});"
-                is BlockItem.Statement.Continue -> "continue;"
-                is BlockItem.Statement.Break -> "break;"
+                is BlockItem.Statement.Continue -> "${padding}continue;"
+                is BlockItem.Statement.Break -> "${padding}break;"
                 is BlockItem.Declaration ->
                     if (localScope.contains(statement.variableName)) throw IllegalStateException("Variable ${statement.variableName} is already declared!")
                     else {
                         variableMap[statement.variableName] = stackIndex
                         localScope.add(statement.variableName)
                         stackIndex -= 8
-                        "${toCType(statement.type)} ${statement.variableName}${if (statement.expression != null) " = ${generateExpression(
+                        "${padding}${toCType(statement.type)} ${statement.variableName}${if (statement.expression != null) " = ${generateExpression(
                             statement.expression
                         )};" else ";"}"
                     }
@@ -122,7 +127,9 @@ class Generator {
                 is Expression.FunctionCall -> "${expression.name}( ${expression.arguments.joinToString(" , ") {
                     generateExpression(it)
                 }} )"
-                is Expression.Unary -> "(${toCOperator(expression.unaryOp.value)} ${generateExpression(expression.expression)}) "
+                is Expression.Unary ->
+                    if (expression.postfix) "(${generateExpression(expression.expression)}${toCOperator(expression.unaryOp.value)}) "
+                    else "(${toCOperator(expression.unaryOp.value)}${generateExpression(expression.expression)}) "
                 is Expression.Cast -> "" // TODO
                 is Expression.Binary -> "(${generateExpression(expression.firstExpression)} ${toCOperator(expression.binaryOp.value)} ${generateExpression(
                     expression.secondExpression
