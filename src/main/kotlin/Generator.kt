@@ -14,8 +14,8 @@ class Generator {
 
         fun generateFunction(function: Function): String {
             function.arguments.forEach {
-                variableMap[it] = argumentOffset
-                localScope.add(it)
+                variableMap[it.name] = argumentOffset
+                localScope.add(it.name)
                 argumentOffset += 8
             }
             val blockItemGenerator = BlockItemGenerator(variableMap, localScope)
@@ -202,6 +202,7 @@ class Generator {
                         |  sete  %al""".trimMargin()
                     else -> throw IllegalStateException()
                 }
+                is Expression.Cast -> "" // TODO
                 is Expression.Binary -> when (expression.binaryOp.type) {
                     Symbol.PLUS -> """${generateExpression(expression.firstExpression)}
                         |  push  %rax

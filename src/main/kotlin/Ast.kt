@@ -3,15 +3,21 @@ package com.aal.hp
 import java.util.*
 
 data class Program(val functions: List<Function>) {
-    fun prettyPrint(): String {
-        return functions.joinToString("\n") { it.prettyPrint() }
-    }
+    fun prettyPrint() = functions.joinToString("\n") { it.prettyPrint() }
 }
 
-data class Function(val name: String, val arguments: List<String>, val blockItems: List<BlockItem>) {
-    fun prettyPrint(): String {
-        return "fun $name(${arguments.joinToString(", ") { "$it: int" }}): int {\n\t${blockItems.joinToString("\n\t") { it.prettyPrint() }}\n}"
-    }
+data class Argument(val name: String, val type: String) {
+    fun prettyPrint() = "$name: $type"
+}
+
+data class Function(
+    val name: String,
+    val returnType: String,
+    val arguments: List<Argument>,
+    val blockItems: List<BlockItem>
+) {
+    fun prettyPrint() =
+        "::$name(${arguments.joinToString(", ") { it.prettyPrint() }}): $returnType {\n\t${blockItems.joinToString("\n\t") { it.prettyPrint() }}\n}"
 }
 
 sealed class BlockItem {
@@ -43,7 +49,7 @@ sealed class BlockItem {
         ) : Statement() {
             init {
                 if (condition == Expression.Empty) {
-                    condition = Expression.Constant("1")
+                    condition = Expression.Constant("1", Literal.S64.value)
                 }
             }
 
@@ -59,7 +65,7 @@ sealed class BlockItem {
         ) : Statement() {
             init {
                 if (condition == Expression.Empty) {
-                    condition = Expression.Constant("1")
+                    condition = Expression.Constant("1", Literal.S64.value)
                 }
             }
 
@@ -84,16 +90,20 @@ sealed class BlockItem {
         }
     }
 
-    data class Declaration(val variableName: String, val expression: Expression?) : BlockItem() {
-        override fun prettyPrint() = "DECLARE $variableName = ${expression?.prettyPrint() ?: "<undefined>"}"
+    data class Declaration(val variableName: String, val type: String, val expression: Expression?) : BlockItem() {
+        override fun prettyPrint() = "DECLARE $variableName: $type = ${expression?.prettyPrint() ?: "<undefined>"}"
     }
 }
 
 sealed class Expression {
     abstract fun prettyPrint(): String
 
-    data class Constant(val value: String) : Expression() {
-        override fun prettyPrint() = value
+    data class Constant(val value: String, val type: String) : Expression() {
+        override fun prettyPrint() = "($value: $type)"
+    }
+
+    data class Cast(val string: String, val expression: Expression): Expression() {
+        override fun prettyPrint() = "(CAST($string)${expression.prettyPrint()})"
     }
 
     data class Unary(val unaryOp: Token, val expression: Expression) : Expression() {
@@ -145,24 +155,31 @@ class Ast {
     }
 
     private fun parseFunction(tokens: Queue<Token>): Function {
-        assert(tokens.poll().type == Keyword.INT)
+        assert(tokens.poll().type == Symbol.DOUBLE_COLON)
         val name = tokens.poll()
         assert(name.type == IDENTIFIER)
         assert(tokens.poll().type == Symbol.OPEN_PARENTHESIS)
-        val arguments = mutableListOf<String>()
+        val arguments = mutableListOf<Argument>()
         while (tokens.peek().type != Symbol.CLOSE_PARENTHESIS) {
-            assert(tokens.poll().type == Keyword.INT)
-            arguments.add(tokens.poll().value)
+            assert(tokens.peek().type == IDENTIFIER)
+            val argumentName = tokens.poll().value
+            assert(tokens.poll().type == Symbol.COLON)
+            assert(tokens.peek().type == Keyword.S64 || tokens.peek().type == Keyword.F64)
+            val argumentType = tokens.poll().type.value!!
+            arguments.add(Argument(argumentName, argumentType))
             if (tokens.peek().type == Symbol.COMMA) tokens.poll()
         }
         assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
+        assert(tokens.poll().type == Symbol.COLON)
+        assert(tokens.peek().type == Keyword.S64 || tokens.peek().type == Keyword.F64)
+        val returnType = tokens.poll().type.value!!
         assert(tokens.poll().type == Symbol.OPEN_BRACE)
         val blockItems = mutableListOf<BlockItem>()
         while (tokens.peek().type != Symbol.CLOSE_BRACE) {
             blockItems.add(parseBlockItem(tokens))
         }
         assert(tokens.poll().type == Symbol.CLOSE_BRACE)
-        return Function(name.value, arguments, blockItems)
+        return Function(name.value, returnType, arguments, blockItems)
     }
 
     private fun parseBlockItem(tokens: Queue<Token>): BlockItem = when (tokens.peek().type) {
@@ -172,15 +189,18 @@ class Ast {
             assert(tokens.poll().type == Symbol.SEMICOLON)
             result
         }
-        Keyword.INT -> {
+        Keyword.VAR -> {
             tokens.poll()
             val variableName = tokens.poll()
             assert(variableName.type == IDENTIFIER)
+            assert(tokens.poll().type == Symbol.COLON)
+            assert(tokens.peek().type == Keyword.S64 || tokens.peek().type == Keyword.F64)
+            val type = tokens.poll().type.value!!
             val expression = if (tokens.peek().type == Symbol.ASSIGN) {
                 tokens.poll()
                 parseExpression(tokens)
             } else null
-            val result = BlockItem.Declaration(variableName.value, expression)
+            val result = BlockItem.Declaration(variableName.value, type, expression)
             assert(tokens.poll().type == Symbol.SEMICOLON)
             result
         }
@@ -212,7 +232,7 @@ class Ast {
         Keyword.FOR -> {
             tokens.poll()
             assert(tokens.poll().type == Symbol.OPEN_PARENTHESIS)
-            if (tokens.peek().type == Keyword.INT) {
+            if (tokens.peek().type == Keyword.VAR) {
                 val declaration = parseBlockItem(tokens) as BlockItem.Declaration
                 val condition = parseExpression(tokens)
                 assert(tokens.poll().type == Symbol.SEMICOLON)
@@ -283,9 +303,9 @@ class Ast {
                     Expression.FunctionCall(token.value, arguments)
                 } else Expression.Variable(token.value)
             }
-            token.type == Literal.INT -> {
+            token.type is Literal -> {
                 tokens.poll()
-                Expression.Constant(token.value)
+                Expression.Constant(token.value, token.type.value!!)
             }
             token.type.isUnary -> {
                 tokens.poll()

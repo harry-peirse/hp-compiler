@@ -15,14 +15,16 @@ interface TokenType {
 
 enum class Keyword(override val value: String) : TokenType {
     RETURN("return"),
-    INT("int"),
+    S64("s64"),
+    F64("f64"),
     IF("if"),
     ELSE("else"),
     FOR("for"),
     DO("do"),
     WHILE("while"),
     BREAK("break"),
-    CONTINUE("continue");
+    CONTINUE("continue"),
+    VAR("var");
 
     override val category = "Keyword"
     override val isBinary = false
@@ -52,8 +54,9 @@ enum class Symbol(
     PERIOD("."),
     COMMA(","),
     ARROW("->"),
+    DOUBLE_COLON("::"),
     QUESTION_MARK("?", 13, isBinary = true),
-    COLON(":", 13, isBinary=true),
+    COLON(":", 13, isBinary = true),
     MINUS("-", 4, isBinary = true, isUnary = true),
     TILDA("~", isUnary = true),
     BANG("!", isUnary = true),
@@ -91,10 +94,10 @@ enum class Symbol(
     override val category = "Symbol"
 }
 
-enum class Literal() : TokenType {
-    INT;
+enum class Literal(override val value: String) : TokenType {
+    S64("s64"),
+    F64("f64");
 
-    override val value: String? = null
     override val category = "Literal"
     override val isBinary = false
     override val isUnary = false
@@ -125,28 +128,30 @@ data class Token(
     fun prettyPrint() = "%5d (%3d, %3d) %10s %-17s : %s".format(pos, row, col, type.category, type, value)
 }
 
-class Lexer {
-    private fun isKeyword(value: String) = Keyword.values().map { it.value }.contains(value)
-    private fun isSymbol(value: String) = Symbol.values().map { it.value }.contains(value)
-    private fun isIdentifier(value: String) = "^([a-z]|[A-Z]|_|\$)([a-z]|[A-Z]|[0-9]|_|\$)*$".toRegex().matches(value)
-    private fun isLiteralInt(value: String) = "^([0-9])+$".toRegex().matches(value)
+fun isKeyword(value: String) = Keyword.values().map { it.value }.contains(value)
+fun isSymbol(value: String) = Symbol.values().map { it.value }.contains(value)
+fun isIdentifier(value: String) = "^([a-z]|[A-Z]|_|\$)([a-z]|[A-Z]|[0-9]|_|\$)*$".toRegex().matches(value)
+fun isLiteralS64(value: String) = "^([0-9])+$".toRegex().matches(value)
+fun isLiteralF64(value: String) = "^([0-9])*\\.([0-9])+$".toRegex().matches(value)
 
+class Lexer {
     fun lex(fileName: String): Queue<Token> {
-        val fileContent = File(fileName).readText()
+        val fileContent = ArrayDeque(File(fileName).readText().toCharArray().toList())
         val tokens = ArrayDeque<Token>()
 
         var token: Token? = null
         var row = 0
         var col = 0
 
-        for (i in fileContent.indices) {
-            val char = fileContent[i]
+        var pos = 0
+        while (fileContent.isNotEmpty()) {
+            val char = fileContent.poll()
 
             when (char) {
                 '\n' -> {
                     row++
                     col = 0
-                    if(token != null) {
+                    if (token != null) {
                         tokens.add(token)
                         token = null
                     }
@@ -155,6 +160,14 @@ class Lexer {
             if (token != null) {
                 val tempToken = "${token.value}$char"
                 token = when {
+                    isLiteralF64(tempToken) || (fileContent.isNotEmpty() && isLiteralF64(tempToken + fileContent.peek())) -> Token(
+                        token.row,
+                        token.col,
+                        token.pos,
+                        Literal.F64,
+                        tempToken
+                    )
+                    isLiteralS64(tempToken) -> Token(token.row, token.col, token.pos, Literal.S64, tempToken)
                     isSymbol(tempToken) -> Token(
                         token.row,
                         token.col,
@@ -170,7 +183,6 @@ class Lexer {
                         tempToken
                     )
                     isIdentifier(tempToken) -> Token(token.row, token.col, token.pos, IDENTIFIER, tempToken)
-                    isLiteralInt(tempToken) -> Token(token.row, token.col, token.pos, Literal.INT, tempToken)
                     else -> {
                         tokens.add(token)
                         null
@@ -183,19 +195,20 @@ class Lexer {
                     isSymbol(tempToken) -> Token(
                         row,
                         col,
-                        i,
+                        pos,
                         Symbol.values().find { tempToken == it.value }!!,
                         tempToken
                     )
                     isKeyword(tempToken) -> Token(
                         row,
                         col,
-                        i,
+                        pos,
                         Keyword.values().find { tempToken == it.value }!!,
                         tempToken
                     )
-                    isIdentifier(tempToken) -> Token(row, col, i, IDENTIFIER, tempToken)
-                    isLiteralInt(tempToken) -> Token(row, col, i, Literal.INT, tempToken)
+                    isIdentifier(tempToken) -> Token(row, col, pos, IDENTIFIER, tempToken)
+                    isLiteralS64(tempToken) -> Token(row, col, pos, Literal.S64, tempToken)
+                    isLiteralF64(tempToken) -> Token(row, col, pos, Literal.F64, tempToken)
                     tempToken == "\n" -> {
                         row++
                         col = -1
@@ -205,6 +218,7 @@ class Lexer {
                 }
             }
 
+            pos++
             col++
         }
 

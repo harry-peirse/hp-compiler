@@ -1,4 +1,4 @@
-int fib(int n) {
+:: fib(n: s64): s64 {
     if (n == 0 || n == 1) {
         return n;
     } else {
@@ -6,7 +6,7 @@ int fib(int n) {
     }
 }
 
-int main() {
-    int n = 10;
+:: main(): s64 {
+    var n: s64 = 10;
     return fib(n);
 }

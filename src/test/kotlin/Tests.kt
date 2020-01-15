@@ -1,7 +1,8 @@
 package com.aal.hp
 
-import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.DynamicTest
+import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestFactory
 import org.junit.jupiter.api.extension.ExtensionContext
 import org.junit.jupiter.api.io.TempDir
@@ -21,10 +22,11 @@ import java.util.stream.Stream
 class TestArgumentProvider : ArgumentsProvider {
     override fun provideArguments(context: ExtensionContext?): Stream<out Arguments> {
         return Stream.of(
-            Arguments.of(2, "int main() { return 2; }"),
+//            Arguments.of(2, ":: main(): s64 { var a: f64 = 0.5 * 4.0; var b: s64 = (s64)a; return b; }"),
+            Arguments.of(2, ":: main(): s64 { return 2; }"),
             Arguments.of(
                 0, """
-                |int main() {
+                |:: main(): s64 {
                 |   putchar(72);
                 |   putchar(101);
                 |   putchar(108);
@@ -44,7 +46,7 @@ class TestArgumentProvider : ArgumentsProvider {
             ),
             Arguments.of(
                 55, """
-                |int fib(int n) {
+                |:: fib(n: s64): s64 {
                 |    if (n == 0 || n == 1) {
                 |        return n;
                 |    } else {
@@ -52,67 +54,80 @@ class TestArgumentProvider : ArgumentsProvider {
                 |    }
                 |}
                 |
-                |int main() {
-                |    int n = 10;
+                |:: main(): s64 {
+                |    var n: s64 = 10;
                 |    return fib(n);
                 |}""".trimMargin()
             ),
-            Arguments.of(1, "int foo() { return 1; } int bar(){return foo();}int main() { return bar(); }"),
-            Arguments.of(1, "int bar(int a){return a;}int main() { return bar(1); }"),
-            Arguments.of(0, "int one() { return 1; } \nint main() { return 1 - one(); }"),
-            Arguments.of(2, "int plusOne(int i) { return i + 1; } \nint main() { return plusOne(1); }"),
-            Arguments.of(3, "int add(int a, int b) { return a + b; } \nint main() { return add(1, 2); }"),
-            Arguments.of(8, "int main() { int a = 2; for(int i=0; i<2; i = i + 1) a = a *2; return a; }"),
-            Arguments.of(8, "int main() { int a; for(a = 2; a<7; a = a+2) ; return a; }"),
-            Arguments.of(2, "int main() { int a = 2; int b = 0; while(a>0) {b = b + 1; a = a - 1;} return b; }"),
-            Arguments.of(2, "int main() { int a = 2; int b = 0; do {b = b + 1; a = a - 1;} while(a>0)  return b; }"),
+            Arguments.of(1, ":: foo(): s64 { return 1; } :: bar(): s64{return foo();}:: main(): s64 { return bar(); }"),
+            Arguments.of(1, ":: bar(a: s64): s64{return a;}:: main(): s64 { return bar(1); }"),
+            Arguments.of(0, ":: one(): s64 { return 1; } \n:: main(): s64 { return 1 - one(); }"),
+            Arguments.of(2, ":: plusOne(i: s64): s64 { return i + 1; } \n:: main(): s64 { return plusOne(1); }"),
+            Arguments.of(3, ":: add(a: s64, b: s64): s64 { return a + b; } \n:: main(): s64 { return add(1, 2); }"),
+            Arguments.of(8, ":: main(): s64 { var a: s64 = 2; for(var i: s64=0; i<2; i = i + 1) a = a *2; return a; }"),
+            Arguments.of(8, ":: main(): s64 { var a: s64; for(a = 2; a<7; a = a+2) ; return a; }"),
+            Arguments.of(2, ":: main(): s64 { var a: s64 = 2; var b: s64 = 0; while(a>0) {b = b + 1; a = a - 1;} return b; }"),
+            Arguments.of(2, ":: main(): s64 { var a: s64 = 2; var b: s64 = 0; do {b = b + 1; a = a - 1;} while(a>0)  return b; }"),
             Arguments.of(
                 6,
-                "int main() { int b = 0; for(int i = 0; i < 5; i = i + 1) { b = b + i; if(i>=3) break; } return b; }"
+                ":: main(): s64 { var b: s64 = 0; for(var i: s64 = 0; i < 5; i = i + 1) { b = b + i; if(i>=3) break; } return b; }"
             ),
             Arguments.of(
                 4,
-                "int main() { int a = 0; for(int i = 0; i < 3; i = i + 1) { if(i / 2 == 1) continue; a = a + 2; } return a; }"
+                ":: main(): s64 { var a: s64 = 0; for(var i: s64 = 0; i < 3; i = i + 1) { if(i / 2 == 1) continue; a = a + 2; } return a; }"
             ),
-            Arguments.of(3, "int main() { return 1 + 2; }"),
-            Arguments.of(7, "int main() { return 1 + 2 * 3; }"),
-            Arguments.of(13, "int main() { return 2 * 2 + 3 * 3; }"),
-            Arguments.of(30, "int main() { return 2 * (2 + 3) * 3; }"),
-            Arguments.of(43, "int main() { return 5 / 4 + 6 * 7; }"),
-            Arguments.of(38, "int main() { return -3 - 5 / 4 + 6 * 7; }"),
-            Arguments.of(35, "int main() { return 2 * -3 - 5 / 4 + 6 * 7; }"),
-            Arguments.of(47, "int main() { return 2 * 3 - 5 / 4 + 6 * 7; }"),
-            Arguments.of(36, "int main() { return 1 + 2 * -3 - 5 / 4 + 6 * 7; }"),
-            Arguments.of(1, "int main() { return 1 == 1; }"),
-            Arguments.of(0, "int main() { return 1 == 2; }"),
-            Arguments.of(1, "int main() { return 0 || 1; }"),
-            Arguments.of(1, "int main() { return 1 || 1; }"),
-            Arguments.of(0, "int main() { return 0 || 0; }"),
-            Arguments.of(3, "int main() { int a = 1; return a + 2; }"),
-            Arguments.of(3, "int main() { int a = 1; int b = 2; return a + b; }"),
-            Arguments.of(2, "int main() { int a = 1; a = 2; return a; }"),
-            Arguments.of(4, "int main() { int a; a = 4; return a; }"),
-            Arguments.of(1, "int main() { int a = 2; if(a > 1) a = 1; return a; }"),
-            Arguments.of(2, "int main() { int a; if(0) a = 1; else a = 2; return a; }"),
-            Arguments.of(3, "int main() { return 0 || 1 ? 3 : 5; }"),
-            Arguments.of(63, "int main() { return 0 || 1 && 2 ? 3 + 5 * 12 : 5 / 3 * (1 + 2); }"),
-            Arguments.of(3, "int main() { int a = 2; if(a > 1) { a = 1; a = a + 2; } return a; }"),
-            Arguments.of(7, "int main() { int a = 2; int b = 4; {a = 3; int b = 10;} return a + b; }"),
-            Arguments.of(1, "int main() { int a = 1; {int a = 2;} return a; }"),
-            Arguments.of(1, "int main() { int a = 1; int b = 2; return a; }")
+            Arguments.of(3, ":: main(): s64 { return 1 + 2; }"),
+            Arguments.of(7, ":: main(): s64 { return 1 + 2 * 3; }"),
+            Arguments.of(13, ":: main(): s64 { return 2 * 2 + 3 * 3; }"),
+            Arguments.of(30, ":: main(): s64 { return 2 * (2 + 3) * 3; }"),
+            Arguments.of(43, ":: main(): s64 { return 5 / 4 + 6 * 7; }"),
+            Arguments.of(38, ":: main(): s64 { return -3 - 5 / 4 + 6 * 7; }"),
+            Arguments.of(35, ":: main(): s64 { return 2 * -3 - 5 / 4 + 6 * 7; }"),
+            Arguments.of(47, ":: main(): s64 { return 2 * 3 - 5 / 4 + 6 * 7; }"),
+            Arguments.of(36, ":: main(): s64 { return 1 + 2 * -3 - 5 / 4 + 6 * 7; }"),
+            Arguments.of(1, ":: main(): s64 { return 1 == 1; }"),
+            Arguments.of(0, ":: main(): s64 { return 1 == 2; }"),
+            Arguments.of(1, ":: main(): s64 { return 0 || 1; }"),
+            Arguments.of(1, ":: main(): s64 { return 1 || 1; }"),
+            Arguments.of(0, ":: main(): s64 { return 0 || 0; }"),
+            Arguments.of(3, ":: main(): s64 { var a: s64 = 1; return a + 2; }"),
+            Arguments.of(3, ":: main(): s64 { var a: s64 = 1; var b: s64 = 2; return a + b; }"),
+            Arguments.of(2, ":: main(): s64 { var a: s64 = 1; a = 2; return a; }"),
+            Arguments.of(4, ":: main(): s64 { var a: s64; a = 4; return a; }"),
+            Arguments.of(1, ":: main(): s64 { var a: s64 = 2; if(a > 1) a = 1; return a; }"),
+            Arguments.of(2, ":: main(): s64 { var a: s64; if(0) a = 1; else a = 2; return a; }"),
+            Arguments.of(3, ":: main(): s64 { return 0 || 1 ? 3 : 5; }"),
+            Arguments.of(63, ":: main(): s64 { return 0 || 1 && 2 ? 3 + 5 * 12 : 5 / 3 * (1 + 2); }"),
+            Arguments.of(3, ":: main(): s64 { var a: s64 = 2; if(a > 1) { a = 1; a = a + 2; } return a; }"),
+            Arguments.of(7, ":: main(): s64 { var a: s64 = 2; var b: s64 = 4; {a = 3; var b: s64 = 10;} return a + b; }"),
+            Arguments.of(1, ":: main(): s64 { var a: s64 = 1; {var a: s64 = 2;} return a; }"),
+            Arguments.of(1, ":: main(): s64 { var a: s64 = 1; var b: s64 = 2; return a; }")
         )
     }
 }
 
 val atomicInt = AtomicInteger(0)
 
-@Execution(ExecutionMode.CONCURRENT)
+//@Execution(ExecutionMode.CONCURRENT)
 class Tests {
 
     private fun fileSource() = File("./src/test/resources")
         .listFiles()?.filter {
             it.name.endsWith(".hp")
         }
+
+    @Test
+    fun testFloatAnalysis() {
+        assertTrue(isLiteralF64("0.1"))
+        assertTrue(isLiteralF64(".1"))
+        assertTrue(isLiteralF64("1.0"))
+        assertFalse(isLiteralF64("1"))
+        assertFalse(isLiteralF64("."))
+        assertFalse(isLiteralF64("a"))
+        assertFalse(isLiteralF64("0.1a"))
+        assertFalse(isLiteralF64(".0a"))
+        assertFalse(isLiteralF64("1a"))
+    }
 
     @ParameterizedTest
     @ArgumentsSource(TestArgumentProvider::class)
