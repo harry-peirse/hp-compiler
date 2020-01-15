@@ -269,7 +269,7 @@ class Generator {
                         |  cmp   %rax, %rcx
                         |  mov   $0,   %rax
                         |  setge %al""".trimMargin()
-                    Symbol.OR -> {
+                    Symbol.OR, Symbol.OR_ -> {
                         val label1 = generateLabel("or1_")
                         val label2 = generateLabel("or2_")
                         """${generateExpression(expression.firstExpression)}
@@ -284,7 +284,7 @@ class Generator {
                             |  setne %al
                             |$label2:""".trimMargin()
                     }
-                    Symbol.AND -> {
+                    Symbol.AND, Symbol.AND_ -> {
                         val label1 = generateLabel("and1_")
                         val label2 = generateLabel("and2_")
                         """${generateExpression(expression.firstExpression)}

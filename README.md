@@ -12,15 +12,14 @@ The language so far supports:
 
 An example function looks like this:
 ```
-:: increment(i: s64): s64 {
-    var one: s 64 = 1;
-    return i + one;
+increment :: (i: s64): s64 {
+    var one: s64 = 1
+    i + one
 }
 ```
 What's going on here?
-- `::` declares a function.
-- `increment` is the name of the function.
-- `()` brackets contains the function arguments.
+- `increment ::` declare a function called `increment`.
+- `()` brackets contains the function arguments. These are optional (in which case you should leave out the following `:` also)
 - `i: s64` is the first and only argument, where `i` is the name of the argument, and `s64` is the type.
 - `: s64` after the parentheses means the return type of the function is `s64`
 - `var one: s64 = 1;` means a mutable variable is being declared, called `one`, of type `s64`, initialised to `1`. The initialisation is optional.

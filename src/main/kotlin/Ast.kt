@@ -17,7 +17,7 @@ data class Function(
     val blockItems: List<BlockItem>
 ) {
     fun prettyPrint() =
-        "::$name(${arguments.joinToString(", ") { it.prettyPrint() }}): $returnType {\n\t${blockItems.joinToString("\n\t") { it.prettyPrint() }}\n}"
+        "FUNCTION $name(${arguments.joinToString(", ") { it.prettyPrint() }}): $returnType {\n\t${blockItems.joinToString("\n\t") { it.prettyPrint() }}\n}"
 }
 
 sealed class BlockItem {
@@ -102,7 +102,7 @@ sealed class Expression {
         override fun prettyPrint() = "($value: $type)"
     }
 
-    data class Cast(val string: String, val expression: Expression): Expression() {
+    data class Cast(val string: String, val expression: Expression) : Expression() {
         override fun prettyPrint() = "(CAST($string)${expression.prettyPrint()})"
     }
 
@@ -150,44 +150,68 @@ class Ast {
         val functions = mutableListOf<Function>()
         do {
             functions.add(parseFunction(tokens))
-        } while (tokens.peek() != null)
+        } while (tokens.size > 1)
         return Program(functions)
     }
 
     private fun parseFunction(tokens: Queue<Token>): Function {
-        assert(tokens.poll().type == Symbol.DOUBLE_COLON)
         val name = tokens.poll()
         assert(name.type == IDENTIFIER)
-        assert(tokens.poll().type == Symbol.OPEN_PARENTHESIS)
-        val arguments = mutableListOf<Argument>()
-        while (tokens.peek().type != Symbol.CLOSE_PARENTHESIS) {
-            assert(tokens.peek().type == IDENTIFIER)
-            val argumentName = tokens.poll().value
+        assert(tokens.poll().type == Symbol.DOUBLE_COLON)
+        val arguments = if (tokens.peek().type == Symbol.OPEN_PARENTHESIS) {
+            tokens.poll()
+            val arguments = mutableListOf<Argument>()
+            while (tokens.peek().type != Symbol.CLOSE_PARENTHESIS) {
+                assert(tokens.peek().type == IDENTIFIER)
+                val argumentName = tokens.poll().value
+                assert(tokens.poll().type == Symbol.COLON)
+                assert(tokens.peek().type.isType)
+                val argumentType = tokens.poll().type.value!!
+                arguments.add(Argument(argumentName, argumentType))
+                if (tokens.peek().type == Symbol.COMMA) tokens.poll()
+            }
+            assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
             assert(tokens.poll().type == Symbol.COLON)
-            assert(tokens.peek().type == Keyword.S64 || tokens.peek().type == Keyword.F64)
-            val argumentType = tokens.poll().type.value!!
-            arguments.add(Argument(argumentName, argumentType))
-            if (tokens.peek().type == Symbol.COMMA) tokens.poll()
-        }
-        assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
-        assert(tokens.poll().type == Symbol.COLON)
-        assert(tokens.peek().type == Keyword.S64 || tokens.peek().type == Keyword.F64)
+            arguments
+        } else listOf<Argument>()
+        assert(tokens.peek().type.isType)
         val returnType = tokens.poll().type.value!!
-        assert(tokens.poll().type == Symbol.OPEN_BRACE)
-        val blockItems = mutableListOf<BlockItem>()
-        while (tokens.peek().type != Symbol.CLOSE_BRACE) {
-            blockItems.add(parseBlockItem(tokens))
+        val blockItems = when (tokens.peek().type) {
+            Symbol.OPEN_BRACE -> {
+                tokens.poll()
+                val blockItems = mutableListOf<BlockItem>()
+                while (tokens.peek().type != Symbol.CLOSE_BRACE) {
+                    blockItems.add(parseBlockItem(tokens))
+                }
+                tokens.poll()
+                if (blockItems.isNotEmpty() && blockItems.last() is BlockItem.Statement.ProxyExpression) {
+                    val last = blockItems.last() as BlockItem.Statement.ProxyExpression
+                    blockItems.remove(last)
+                    blockItems.add(BlockItem.Statement.Return(last.expression))
+                }
+                blockItems
+            }
+            Symbol.ASSIGN -> {
+                tokens.poll()
+                listOf(parseReturn(tokens))
+            }
+            else -> {
+                throw IllegalStateException()
+            }
         }
-        assert(tokens.poll().type == Symbol.CLOSE_BRACE)
         return Function(name.value, returnType, arguments, blockItems)
+    }
+
+    private fun parseReturn(tokens: Queue<Token>): BlockItem.Statement.Return {
+        val result = BlockItem.Statement.Return(parseExpression(tokens))
+        if (tokens.peek().type == Symbol.SEMICOLON) tokens.poll()
+        return result
     }
 
     private fun parseBlockItem(tokens: Queue<Token>): BlockItem = when (tokens.peek().type) {
         Keyword.RETURN -> {
             tokens.poll()
-            val result = BlockItem.Statement.Return(parseExpression(tokens))
-            assert(tokens.poll().type == Symbol.SEMICOLON)
-            result
+            parseReturn(tokens)
         }
         Keyword.VAR -> {
             tokens.poll()
@@ -201,14 +225,12 @@ class Ast {
                 parseExpression(tokens)
             } else null
             val result = BlockItem.Declaration(variableName.value, type, expression)
-            assert(tokens.poll().type == Symbol.SEMICOLON)
+            if (tokens.peek().type == Symbol.SEMICOLON) tokens.poll()
             result
         }
         Keyword.IF -> {
             tokens.poll()
-            assert(tokens.poll().type == Symbol.OPEN_PARENTHESIS)
             val condition = parseExpression(tokens)
-            assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
             val firstExpression = parseBlockItem(tokens)
             val secondExpression = if (tokens.peek().type == Keyword.ELSE) {
                 tokens.poll()
@@ -231,13 +253,14 @@ class Ast {
         }
         Keyword.FOR -> {
             tokens.poll()
-            assert(tokens.poll().type == Symbol.OPEN_PARENTHESIS)
+            val usingParentheses = tokens.peek().type == Symbol.OPEN_PARENTHESIS
+            if (usingParentheses) tokens.poll()
             if (tokens.peek().type == Keyword.VAR) {
                 val declaration = parseBlockItem(tokens) as BlockItem.Declaration
                 val condition = parseExpression(tokens)
                 assert(tokens.poll().type == Symbol.SEMICOLON)
                 val increment = parseExpression(tokens)
-                assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
+                if (usingParentheses) assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
                 val statement = parseBlockItem(tokens) as BlockItem.Statement
                 BlockItem.Statement.ForDeclaration(declaration, condition, increment, statement)
             } else {
@@ -246,16 +269,14 @@ class Ast {
                 val condition = parseExpression(tokens)
                 assert(tokens.poll().type == Symbol.SEMICOLON)
                 val increment = parseExpression(tokens)
-                assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
+                if (usingParentheses) assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
                 val statement = parseBlockItem(tokens) as BlockItem.Statement
                 BlockItem.Statement.For(initialization, condition, increment, statement)
             }
         }
         Keyword.WHILE -> {
             tokens.poll()
-            assert(tokens.poll().type == Symbol.OPEN_PARENTHESIS)
             val expression = parseExpression(tokens)
-            assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
             val statement = parseBlockItem(tokens)
             BlockItem.Statement.While(expression, statement as BlockItem.Statement)
         }
@@ -263,9 +284,7 @@ class Ast {
             tokens.poll()
             val statement = parseBlockItem(tokens)
             assert(tokens.poll().type == Keyword.WHILE)
-            assert(tokens.poll().type == Symbol.OPEN_PARENTHESIS)
             val expression = parseExpression(tokens)
-            assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
             BlockItem.Statement.DoWhile(statement as BlockItem.Statement, expression)
         }
         Keyword.BREAK -> {
@@ -278,14 +297,13 @@ class Ast {
         }
         else -> {
             val result = BlockItem.Statement.ProxyExpression(parseExpression(tokens))
-            assert(tokens.poll().type == Symbol.SEMICOLON)
+            if (tokens.peek().type == Symbol.SEMICOLON) tokens.poll()
             result
         }
     }
 
     private fun parseNonBinaryExpression(tokens: Queue<Token>): Expression {
         val token = tokens.peek()
-//        println("1] Inspecting token: $token")
         return when {
             token.type == IDENTIFIER -> {
                 tokens.poll()
@@ -305,7 +323,7 @@ class Ast {
             }
             token.type is Literal -> {
                 tokens.poll()
-                Expression.Constant(token.value, token.type.value!!)
+                Expression.Constant(token.value, token.type.value)
             }
             token.type.isUnary -> {
                 tokens.poll()

@@ -11,12 +11,11 @@ interface TokenType {
     val binaryPriority: Int
     val isAssignment: Boolean
     val isPostfix: Boolean
+    val isType: Boolean
 }
 
-enum class Keyword(override val value: String) : TokenType {
+enum class Keyword(override val value: String, override val isType: Boolean = false) : TokenType {
     RETURN("return"),
-    S64("s64"),
-    F64("f64"),
     IF("if"),
     ELSE("else"),
     FOR("for"),
@@ -24,7 +23,10 @@ enum class Keyword(override val value: String) : TokenType {
     WHILE("while"),
     BREAK("break"),
     CONTINUE("continue"),
-    VAR("var");
+    VAR("var"),
+    VOID("void", true),
+    S64("s64", true), // int
+    F64("f64", true); // float
 
     override val category = "Keyword"
     override val isBinary = false
@@ -40,7 +42,8 @@ enum class Symbol(
     override val isUnary: Boolean = false,
     override val isBinary: Boolean = false,
     override val isAssignment: Boolean = false,
-    override val isPostfix: Boolean = false
+    override val isPostfix: Boolean = false,
+    override val isType: Boolean = false
 ) : TokenType {
     OPEN_PARENTHESIS("("),
     CLOSE_PARENTHESIS(")"),
@@ -70,7 +73,9 @@ enum class Symbol(
     BITWISE_SHIFT_RIGHT(">>", 5, isBinary = true),
     MODULUS("%", 3, isBinary = true, isUnary = true),
     AND("&&", 11, isBinary = true),
+    AND_("and", 11, isBinary = true),
     OR("||", 12, isBinary = true),
+    OR_("or", 12, isBinary = true),
     EQUAL("==", 7, isBinary = true),
     NOT_EQUAL("!=", 7, isBinary = true),
     LESS_THAN("<", 6, isBinary = true),
@@ -104,18 +109,32 @@ enum class Literal(override val value: String) : TokenType {
     override val binaryPriority = -1
     override val isAssignment: Boolean = false
     override val isPostfix: Boolean = false
+    override val isType: Boolean = false
 }
 
 object IDENTIFIER : TokenType {
-    override val value: String? = null
+    override val value: String? = "IDENTIFIER"
     override val category = "Identifier"
     override val isBinary = false
     override val isUnary = false
     override val binaryPriority = -1
     override val isAssignment: Boolean = false
     override val isPostfix: Boolean = false
+    override val isType: Boolean = true
 
     override fun toString() = "IDENTIFIER"
+}
+
+object EOF : TokenType {
+    override val value: String? = "EOF"
+    override val category = "EOF"
+    override val isBinary = false
+    override val isUnary = false
+    override val binaryPriority = -1
+    override val isAssignment: Boolean = false
+    override val isPostfix: Boolean = false
+    override val isType: Boolean = false
+    override fun toString() = "EOF"
 }
 
 data class Token(
@@ -226,6 +245,7 @@ class Lexer {
             tokens.add(token)
         }
 
+        tokens.add(Token(row, col, pos, EOF, "EOF"))
         return tokens
     }
 }
