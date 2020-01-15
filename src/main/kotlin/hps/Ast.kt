@@ -96,8 +96,17 @@ sealed class Code {
             }
         }
 
-        data class Declaration(val variableName: String, val type: String, val expression: Expression?) : BlockItem() {
-            override fun prettyPrint() = "DECLARE $variableName: $type = ${expression?.prettyPrint() ?: "<undefined>"}"
+        data class Declaration(
+            val variableName: String,
+            val type: String,
+            val isArray: Boolean,
+            val arraySize: Int?,
+            val expression: Expression?
+        ) : BlockItem() {
+            override fun prettyPrint() =
+                if (isArray) "DECLARE $variableName: $type[${arraySize ?: ""}] = ${expression?.prettyPrint()
+                    ?: "<undefined>"}"
+                else "DECLARE $variableName: $type = ${expression?.prettyPrint() ?: "<undefined>"}"
         }
     }
 
@@ -108,8 +117,8 @@ sealed class Code {
             override fun prettyPrint() = "($value: $type)"
         }
 
-        data class Cast(val string: String, val expression: Expression) : Expression() {
-            override fun prettyPrint() = "(CAST($string)${expression.prettyPrint()})"
+        data class Cast(val newType: String, val expression: Expression) : Expression() {
+            override fun prettyPrint() = "(CAST($newType)${expression.prettyPrint()})"
         }
 
         data class Unary(val unaryOp: Token, val expression: Expression, val postfix: Boolean = false) : Expression() {
@@ -150,20 +159,38 @@ sealed class Code {
         data class FunctionCall(val name: String, val arguments: List<Expression>) : Expression() {
             override fun prettyPrint() = "$name(${arguments.joinToString(", ") { it.prettyPrint() }})"
         }
+
+        data class ArrayCall(val variable: String, val index: Expression) : Expression() {
+            override fun prettyPrint() = "$variable[${index.prettyPrint()}]"
+        }
+
+        data class ArrayConstant(val values: List<String>) : Expression() {
+            override fun prettyPrint() = "[${values.joinToString(", ")}]"
+        }
+
+        data class ArrayAssign(
+            val variableName: String,
+            val index: Expression,
+            val assignmentToken: Token,
+            val expression: Expression
+        ) : Expression() {
+            override fun prettyPrint() =
+                "$variableName[${index.prettyPrint()}] ${assignmentToken.value} ${expression.prettyPrint()}"
+        }
     }
 }
 
 class Ast {
 
     fun parseProgram(tokens: Queue<Token>): Program {
-        val functions = mutableListOf<Code.Function>()
+        val functions = mutableListOf<Function>()
         do {
             functions.add(parseFunction(tokens))
         } while (tokens.size > 1)
         return Program(functions)
     }
 
-    private fun parseFunction(tokens: Queue<Token>): Code.Function {
+    private fun parseFunction(tokens: Queue<Token>): Function {
         val name = tokens.poll()
         assert(name.type == IDENTIFIER)
         assert(tokens.poll().type == Symbol.DOUBLE_COLON)
@@ -175,16 +202,16 @@ class Ast {
                 val argumentName = tokens.poll().value
                 assert(tokens.poll().type == Symbol.COLON)
                 assert(tokens.peek().type.isType)
-                val argumentType = tokens.poll().type.value!!
+                val argumentType = tokens.poll().type.value
                 arguments.add(Argument(argumentName, argumentType))
                 if (tokens.peek().type == Symbol.COMMA) tokens.poll()
             }
             assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
-            assert(tokens.poll().type == Symbol.COLON)
+            assert(tokens.poll().type == Symbol.ARROW)
             arguments
         } else listOf<Argument>()
         assert(tokens.peek().type.isType)
-        val returnType = tokens.poll().type.value!!
+        val returnType = tokens.poll().type.value
         val blockItems = when (tokens.peek().type) {
             Symbol.OPEN_BRACE -> {
                 tokens.poll()
@@ -228,12 +255,24 @@ class Ast {
             assert(variableName.type == IDENTIFIER)
             assert(tokens.poll().type == Symbol.COLON)
             assert(tokens.peek().type == Keyword.S64 || tokens.peek().type == Keyword.F64)
-            val type = tokens.poll().type.value!!
+            val type = tokens.poll().type.value
+            val isArray = tokens.peek().type == Symbol.OPEN_SQUARE_BRACKET
+            val arraySize = if (isArray) {
+                tokens.poll()
+                if (tokens.peek().type == Literal.S64) {
+                    val size = tokens.poll().value.toInt()
+                    assert(tokens.poll().type == Symbol.CLOSE_SQUARE_BRACKET)
+                    size
+                } else {
+                    assert(tokens.poll().type == Symbol.CLOSE_SQUARE_BRACKET)
+                    null
+                }
+            } else null
             val expression = if (tokens.peek().type == Symbol.ASSIGN) {
                 tokens.poll()
                 parseExpression(tokens)
             } else null
-            val result = BlockItem.Declaration(variableName.value, type, expression)
+            val result = BlockItem.Declaration(variableName.value, type, isArray, arraySize, expression)
             if (tokens.peek().type == Symbol.SEMICOLON) tokens.poll()
             result
         }
@@ -336,6 +375,14 @@ class Ast {
                         Expression.Variable(token.value),
                         true
                     )
+                    tokens.peek().type == Symbol.OPEN_SQUARE_BRACKET -> {
+                        tokens.poll()
+                        val result = Expression.ArrayCall(token.value, parseExpression(tokens))
+                        assert(tokens.poll().type == Symbol.CLOSE_SQUARE_BRACKET)
+                        if (tokens.peek().type.isAssignment) {
+                            Expression.ArrayAssign(token.value, result.index, tokens.poll(), parseExpression(tokens))
+                        } else result
+                    }
                     else -> Expression.Variable(token.value)
                 }
             }
@@ -354,6 +401,18 @@ class Ast {
                 nested
             }
             token.type == Symbol.SEMICOLON -> Expression.Empty
+            token.type == Symbol.OPEN_SQUARE_BRACKET -> {
+                tokens.poll()
+                val values = mutableListOf<String>()
+                while (tokens.peek().type != Symbol.CLOSE_SQUARE_BRACKET) {
+                    values.add(tokens.poll().value)
+                    if (tokens.peek().type == Symbol.COMMA) {
+                        tokens.poll()
+                    }
+                }
+                tokens.poll()
+                Expression.ArrayConstant(values)
+            }
             else -> throw IllegalStateException("Unexpected token: $token")
         }
     }
@@ -379,6 +438,14 @@ class Ast {
             ) else Expression.Binary(op, expression, nextExpression)
             nextToken = tokens.peek()
         }
+
+        if (tokens.peek().type == Keyword.AS) {
+            tokens.poll()
+            val newType = tokens.poll()
+            assert(newType.type.isType)
+            expression = Expression.Cast(newType.value, expression)
+        }
+
 //        println("Parsed expression: $expression")
         return expression
     }

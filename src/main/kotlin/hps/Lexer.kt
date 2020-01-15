@@ -4,7 +4,7 @@ import java.io.File
 import java.util.*
 
 interface TokenType {
-    val value: String?
+    val value: String
     val category: String
     val isUnary: Boolean
     val isBinary: Boolean
@@ -25,6 +25,7 @@ enum class Keyword(override val value: String, override val isType: Boolean = fa
     BREAK("break"),
     CONTINUE("continue"),
     VAR("var"),
+    AS("as"),
     VOID("void", true),
     S64("s64", true), // int
     F64("f64", true); // float
@@ -114,7 +115,7 @@ enum class Literal(override val value: String) : TokenType {
 }
 
 object IDENTIFIER : TokenType {
-    override val value: String? = "IDENTIFIER"
+    override val value: String = "IDENTIFIER"
     override val category = "Identifier"
     override val isBinary = false
     override val isUnary = false
@@ -127,7 +128,7 @@ object IDENTIFIER : TokenType {
 }
 
 object EOF : TokenType {
-    override val value: String? = "EOF"
+    override val value: String = "EOF"
     override val category = "EOF"
     override val isBinary = false
     override val isUnary = false
@@ -145,7 +146,7 @@ data class Token(
     val type: TokenType,
     val value: String
 ) {
-    fun prettyPrint() = "%5d (%3d, %3d) %10s %-17s : %s".format(pos, row, col, type.category, type, value)
+    fun prettyPrint() = "%5d (%3d, %3d) %10s %-21s : %s".format(pos, row, col, type.category, type, value)
 }
 
 fun isKeyword(value: String) = Keyword.values().map { it.value }.contains(value)
@@ -169,8 +170,6 @@ class Lexer {
 
             when (char) {
                 '\n' -> {
-                    row++
-                    col = 0
                     if (token != null) {
                         tokens.add(token)
                         token = null

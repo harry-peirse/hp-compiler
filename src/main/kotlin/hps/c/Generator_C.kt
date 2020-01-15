@@ -25,17 +25,13 @@ class Generator {
 
     private inner class FunctionGenerator {
 
-        val variableMap = mutableMapOf<String, Int>()
         val localScope = mutableSetOf<String>()
-        var argumentOffset: Int = 8
 
         fun generateFunction(function: Code.Function): String {
             function.arguments.forEach {
-                variableMap[it.name] = argumentOffset
                 localScope.add(it.name)
-                argumentOffset += 8
             }
-            val blockItemGenerator = BlockItemGenerator(variableMap, localScope)
+            val blockItemGenerator = BlockItemGenerator()
             val content = function.blockItems.joinToString("\n") {
                 blockItemGenerator.generateBlockItem(it)
             }
@@ -45,15 +41,8 @@ class Generator {
             }})\n{\n$content\n}"
         }
 
-        private inner class BlockItemGenerator(
-            val variableMap: MutableMap<String, Int> = mutableMapOf(),
-            val localScope: MutableSet<String> = mutableSetOf(),
-            val depth: Int = 1,
-            var stackIndex: Int = -8,
-            var continueLabel: String? = null,
-            var breakLabel: String? = null
-        ) {
-
+        private inner class BlockItemGenerator(val depth: Int = 1) {
+            val localScope: MutableSet<String> = mutableSetOf()
             val padding = "    ".repeat(depth)
 
             fun generateBlockItem(statement: BlockItem, padding: String = this.padding): String = when (statement) {
@@ -74,15 +63,7 @@ class Generator {
                         )}"
                     }
                 is BlockItem.Statement.Compound -> {
-                    val blockItemGenerator =
-                        BlockItemGenerator(
-                            variableMap.toMutableMap(),
-                            mutableSetOf(),
-                            depth + 1,
-                            stackIndex,
-                            continueLabel,
-                            breakLabel
-                        )
+                    val blockItemGenerator = BlockItemGenerator(depth + 1)
                     "$padding{\n${statement.blockItems.map { blockItemGenerator.generateBlockItem(it) }.joinToString(
                         "\n"
                     )}\n$padding}"
@@ -92,7 +73,7 @@ class Generator {
                         statement.increment
                     )})\n${generateBlockItem(statement.statement)}"
                 is BlockItem.Statement.For ->
-                    "${padding}for (${generateExpression(statement.initialization)}; ${generateExpression(statement.condition)};  ${generateExpression(
+                    "${padding}for (${generateExpression(statement.initialization)}; ${generateExpression(statement.condition)}; ${generateExpression(
                         statement.increment
                     )})\n${generateBlockItem(statement.statement)}"
                 is BlockItem.Statement.While -> "${padding}while (${generateExpression(statement.condition)})\n${generateBlockItem(
@@ -106,18 +87,22 @@ class Generator {
                 is BlockItem.Declaration ->
                     if (localScope.contains(statement.variableName)) throw IllegalStateException("Variable ${statement.variableName} is already declared!")
                     else {
-                        variableMap[statement.variableName] = stackIndex
                         localScope.add(statement.variableName)
-                        stackIndex -= 8
-                        "${padding}${toCType(statement.type)} ${statement.variableName}${if (statement.expression != null) " = ${generateExpression(
-                            statement.expression
-                        )};" else ";"}"
+                        if(statement.isArray) {
+                            "${padding}${toCType(statement.type)} ${statement.variableName}[${statement.arraySize ?: ""}]${if (statement.expression != null) " = ${generateExpression(
+                                statement.expression
+                            )};" else ";"}"
+                        } else {
+                            "${padding}${toCType(statement.type)} ${statement.variableName}${if (statement.expression != null) " = ${generateExpression(
+                                statement.expression
+                            )};" else ";"}"
+                        }
                     }
             }
 
             private fun generateExpression(expression: Expression): String = when (expression) {
                 is Expression.Constant -> expression.value
-                is Expression.Assign -> "${expression.variableName} = ${generateExpression(expression.expression)}"
+                is Expression.Assign -> "${expression.variableName} ${expression.assignmentToken.value} ${generateExpression(expression.expression)}"
                 is Expression.Variable -> expression.variableName
                 is Expression.Nested -> "(${generateExpression(expression.expression)})"
                 is Expression.Conditional -> "${generateExpression(expression.condition)} ? ${generateExpression(
@@ -130,10 +115,13 @@ class Generator {
                 is Expression.Unary ->
                     if (expression.postfix) "(${generateExpression(expression.expression)}${toCOperator(expression.unaryOp.value)}) "
                     else "(${toCOperator(expression.unaryOp.value)}${generateExpression(expression.expression)}) "
-                is Expression.Cast -> "" // TODO
+                is Expression.Cast -> "((${toCType(expression.newType)})${generateExpression(expression.expression)})"
                 is Expression.Binary -> "(${generateExpression(expression.firstExpression)} ${toCOperator(expression.binaryOp.value)} ${generateExpression(
                     expression.secondExpression
                 )})"
+                is Expression.ArrayCall -> "${expression.variable}[${generateExpression(expression.index)}]"
+                is Expression.ArrayConstant -> "{${expression.values.joinToString(", ") }}"
+                is Expression.ArrayAssign -> "${expression.variableName}[${generateExpression(expression.index)}] ${expression.assignmentToken.value} ${generateExpression(expression.expression)}"
             }
         }
     }

@@ -1,0 +1,9 @@
+main :: s64 {
+    var array: s64[] = [1, 2, 3]
+    var accumulator: s64 = 0
+    array[1] = 4
+    for (var i: s64 = 0; i < 3; i++) {
+        accumulator += array[i]
+    }
+    accumulator * 2
+}
