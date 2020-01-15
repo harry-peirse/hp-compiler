@@ -1,7 +1,9 @@
-package com.aal.hp.x64
+package hps.x64
 
 import com.aal.hp.*
-import com.aal.hp.Code.*
+import hps.Code
+import hps.Code.*
+import hps.Symbol
 
 class Generator {
 

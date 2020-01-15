@@ -1,7 +1,7 @@
-package com.aal.hp.c
+package hps.c
 
-import com.aal.hp.Code
-import com.aal.hp.Code.*
+import hps.Code
+import hps.Code.*
 
 class Generator {
 

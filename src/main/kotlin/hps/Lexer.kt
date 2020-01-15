@@ -1,4 +1,4 @@
-package com.aal.hp
+package hps
 
 import java.io.File
 import java.util.*
@@ -14,7 +14,8 @@ interface TokenType {
     val isType: Boolean
 }
 
-enum class Keyword(override val value: String, override val isType: Boolean = false) : TokenType {
+enum class Keyword(override val value: String, override val isType: Boolean = false) :
+    TokenType {
     RETURN("return"),
     IF("if"),
     ELSE("else"),
@@ -179,14 +180,22 @@ class Lexer {
             if (token != null) {
                 val tempToken = "${token.value}$char"
                 token = when {
-                    isLiteralF64(tempToken) || (fileContent.isNotEmpty() && isLiteralF64(tempToken + fileContent.peek())) -> Token(
+                    isLiteralF64(tempToken) || (fileContent.isNotEmpty() && isLiteralF64(
+                        tempToken + fileContent.peek()
+                    )) -> Token(
                         token.row,
                         token.col,
                         token.pos,
                         Literal.F64,
                         tempToken
                     )
-                    isLiteralS64(tempToken) -> Token(token.row, token.col, token.pos, Literal.S64, tempToken)
+                    isLiteralS64(tempToken) -> Token(
+                        token.row,
+                        token.col,
+                        token.pos,
+                        Literal.S64,
+                        tempToken
+                    )
                     isSymbol(tempToken) -> Token(
                         token.row,
                         token.col,
@@ -201,7 +210,13 @@ class Lexer {
                         Keyword.values().find { tempToken == it.value }!!,
                         tempToken
                     )
-                    isIdentifier(tempToken) -> Token(token.row, token.col, token.pos, IDENTIFIER, tempToken)
+                    isIdentifier(tempToken) -> Token(
+                        token.row,
+                        token.col,
+                        token.pos,
+                        IDENTIFIER,
+                        tempToken
+                    )
                     else -> {
                         tokens.add(token)
                         null
@@ -225,9 +240,27 @@ class Lexer {
                         Keyword.values().find { tempToken == it.value }!!,
                         tempToken
                     )
-                    isIdentifier(tempToken) -> Token(row, col, pos, IDENTIFIER, tempToken)
-                    isLiteralS64(tempToken) -> Token(row, col, pos, Literal.S64, tempToken)
-                    isLiteralF64(tempToken) -> Token(row, col, pos, Literal.F64, tempToken)
+                    isIdentifier(tempToken) -> Token(
+                        row,
+                        col,
+                        pos,
+                        IDENTIFIER,
+                        tempToken
+                    )
+                    isLiteralS64(tempToken) -> Token(
+                        row,
+                        col,
+                        pos,
+                        Literal.S64,
+                        tempToken
+                    )
+                    isLiteralF64(tempToken) -> Token(
+                        row,
+                        col,
+                        pos,
+                        Literal.F64,
+                        tempToken
+                    )
                     tempToken == "\n" -> {
                         row++
                         col = -1

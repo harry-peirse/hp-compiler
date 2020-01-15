@@ -1,11 +1,15 @@
-package com.aal.hp.c
+package hps.c
 
-import org.junit.jupiter.api.Assertions.*
+import hps.Ast
+import hps.Lexer
+import hps.atomicInt
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.DynamicTest
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestFactory
 import org.junit.jupiter.api.extension.ExtensionContext
 import org.junit.jupiter.api.io.TempDir
+import org.junit.jupiter.api.parallel.Execution
+import org.junit.jupiter.api.parallel.ExecutionMode
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.ArgumentsProvider
@@ -14,10 +18,7 @@ import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
 import java.nio.file.Path
-import java.util.concurrent.atomic.AtomicInteger
 import java.util.stream.Stream
-
-import com.aal.hp.*
 
 class TestArgumentProvider : ArgumentsProvider {
     override fun provideArguments(context: ExtensionContext?): Stream<out Arguments> {
@@ -66,8 +67,14 @@ class TestArgumentProvider : ArgumentsProvider {
             Arguments.of(3, "add:: (a: s64, b: s64): s64 { return a + b; } \nmain :: (): s64 { return add(1, 2); }"),
             Arguments.of(8, "main :: (): s64 { var a: s64 = 2; for var i: s64=0; i<2; i = i + 1 a = a *2; return a; }"),
             Arguments.of(8, "main :: s64 { var a: s64; for(a = 2; a<7; a = a+2) ; return a; }"),
-            Arguments.of(2, "main :: s64 { var a: s64 = 2; var b: s64 = 0; while a>0 {b = b + 1; a = a - 1;} return b; }"),
-            Arguments.of(2, "main :: (): s64 { var a: s64 = 2; var b: s64 = 0; do {b = b + 1; a = a - 1;} while a > 0 return b }"),
+            Arguments.of(
+                2,
+                "main :: s64 { var a: s64 = 2; var b: s64 = 0; while a>0 {b = b + 1; a = a - 1;} return b; }"
+            ),
+            Arguments.of(
+                2,
+                "main :: (): s64 { var a: s64 = 2; var b: s64 = 0; do {b = b + 1; a = a - 1;} while a > 0 return b }"
+            ),
             Arguments.of(
                 6,
                 "main :: (): s64 { var b: s64 = 0; for(var i: s64 = 0; i < 5; i = i + 1) { b = b + i; if(i>=3) break; } return b; }"
@@ -99,35 +106,23 @@ class TestArgumentProvider : ArgumentsProvider {
             Arguments.of(3, "main :: (): s64 { return 0 || 1 ? 3 : 5; }"),
             Arguments.of(63, "main :: (): s64 { return 0 || 1 && 2 ? 3 + 5 * 12 : 5 / 3 * (1 + 2); }"),
             Arguments.of(3, "main :: (): s64 { var a: s64 = 2; if(a > 1) { a = 1; a = a + 2; } return a; }"),
-            Arguments.of(7, "main :: (): s64 { var a: s64 = 2; var b: s64 = 4; {a = 3; var b: s64 = 10;} return a + b; }"),
+            Arguments.of(
+                7,
+                "main :: (): s64 { var a: s64 = 2; var b: s64 = 4; {a = 3; var b: s64 = 10;} return a + b; }"
+            ),
             Arguments.of(1, "main :: (): s64 { var a: s64 = 1; {var a: s64 = 2;} return a; }"),
             Arguments.of(1, "main :: (): s64 { var a: s64 = 1; var b: s64 = 2; return a; }")
         )
     }
 }
 
-val atomicInt = AtomicInteger(0)
-
-//@Execution(ExecutionMode.CONCURRENT)
+@Execution(ExecutionMode.CONCURRENT)
 class Tests {
 
     private fun fileSource() = File("./src/test/resources")
         .listFiles()?.filter {
             it.name.endsWith(".hp")
         }
-
-    @Test
-    fun testFloatAnalysis() {
-        assertTrue(isLiteralF64("0.1"))
-        assertTrue(isLiteralF64(".1"))
-        assertTrue(isLiteralF64("1.0"))
-        assertFalse(isLiteralF64("1"))
-        assertFalse(isLiteralF64("."))
-        assertFalse(isLiteralF64("a"))
-        assertFalse(isLiteralF64("0.1a"))
-        assertFalse(isLiteralF64(".0a"))
-        assertFalse(isLiteralF64("1a"))
-    }
 
     @ParameterizedTest
     @ArgumentsSource(TestArgumentProvider::class)

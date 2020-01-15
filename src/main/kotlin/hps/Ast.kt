@@ -1,8 +1,8 @@
-package com.aal.hp
+package hps
 
 import java.util.*
 
-import com.aal.hp.Code.*
+import hps.Code.*
 
 sealed class Code {
 
