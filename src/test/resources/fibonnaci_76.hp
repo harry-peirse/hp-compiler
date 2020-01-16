@@ -6,8 +6,8 @@ fibonacci :: (number: s64) -> s64 =
 main :: s64 = foo()
 
 foo :: s64 {
-    var answer: s64 = 0
-    for (var i: s64 = 10; i > 0; i--) {
+    answer: s64 = 0
+    for (i: s64 = 10; i > 0; i--) {
         if i == 9 continue else if i == 7 break
         answer = answer + fibonacci(i)
     }

@@ -24,7 +24,7 @@ enum class Keyword(override val value: String, override val isType: Boolean = fa
     WHILE("while"),
     BREAK("break"),
     CONTINUE("continue"),
-    VAR("var"),
+//    VAR("var"),
     AS("as"),
     IN("in"),
     VOID("void", true),

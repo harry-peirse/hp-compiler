@@ -23,7 +23,7 @@ import java.util.stream.Stream
 class TestArgumentProvider : ArgumentsProvider {
     override fun provideArguments(context: ExtensionContext?): Stream<out Arguments> {
         return Stream.of(
-            Arguments.of(2, "main :: s64 { var a: f64 = 0.5 * 4.0; var b: s64 = a as s64; return b; }"),
+            Arguments.of(2, "main :: s64 { a: f64 = 0.5 * 4.0; b: s64 = a as s64; return b; }"),
             Arguments.of(2, "main :: s64 = 2"),
             Arguments.of(
                 0, """
@@ -56,7 +56,7 @@ class TestArgumentProvider : ArgumentsProvider {
                 |}
                 |
                 |main::() -> s64 {
-                |    var n: s64 = 10;
+                |    n: s64 = 10;
                 |    return fib(n);
                 |}""".trimMargin()
             ),
@@ -65,23 +65,27 @@ class TestArgumentProvider : ArgumentsProvider {
             Arguments.of(0, "one::() -> s64 { return 1; } \nmain :: s64 { return 1 - one(); }"),
             Arguments.of(2, "plusOne::(i: s64) -> s64 { return i + 1; } \nmain :: s64 { return plusOne(1); }"),
             Arguments.of(3, "add:: (a: s64, b: s64) -> s64 { return a + b; } \nmain :: s64 { return add(1, 2); }"),
-            Arguments.of(8, "main :: s64 { var a: s64 = 2; for var i: s64=0; i<2; i = i + 1 a = a *2; return a; }"),
-            Arguments.of(8, "main :: s64 { var a: s64; for(a = 2; a<7; a = a+2) ; return a; }"),
+            Arguments.of(8, "main :: s64 { a: s64 = 2; for i: s64=0; i<2; i = i + 1 a = a *2; return a; }"),
+            Arguments.of(8, "main :: s64 { " +
+                    "a: s64; " +
+                    "for(a = 2; a<7; a = a+2) ; " +
+                    "return a; " +
+                    "}"),
             Arguments.of(
                 2,
-                "main :: s64 { var a: s64 = 2; var b: s64 = 0; while a>0 {b = b + 1; a = a - 1;} return b; }"
+                "main :: s64 { a: s64 = 2; b: s64 = 0; while a>0 {b = b + 1; a = a - 1;} return b; }"
             ),
             Arguments.of(
                 2,
-                "main :: s64 { var a: s64 = 2; var b: s64 = 0; do {b = b + 1; a = a - 1;} while a > 0 return b }"
+                "main :: s64 { a: s64 = 2; b: s64 = 0; do {b = b + 1; a = a - 1;} while a > 0 return b }"
             ),
             Arguments.of(
                 6,
-                "main :: s64 { var b: s64 = 0; for(var i: s64 = 0; i < 5; i = i + 1) { b = b + i; if(i>=3) break; } return b; }"
+                "main :: s64 { b: s64 = 0; for(i: s64 = 0; i < 5; i = i + 1) { b = b + i; if(i>=3) break; } return b; }"
             ),
             Arguments.of(
                 4,
-                "main :: s64 { var a: s64 = 0; for(var i: s64 = 0; i < 3; i = i + 1) { if(i / 2 == 1) continue; a = a + 2; } return a; }"
+                "main :: s64 { a: s64 = 0; for(i: s64 = 0; i < 3; i = i + 1) { if(i / 2 == 1) continue; a = a + 2; } return a; }"
             ),
             Arguments.of(3, "main :: s64 { return 1 + 2; }"),
             Arguments.of(7, "main :: s64 { return 1 + 2 * 3; }"),
@@ -97,21 +101,21 @@ class TestArgumentProvider : ArgumentsProvider {
             Arguments.of(1, "main :: s64 { return 0 || 1 }"),
             Arguments.of(1, "main :: s64 = 1 or 1"),
             Arguments.of(0, "main :: s64 { return 0 || 0 }"),
-            Arguments.of(3, "main :: s64 { var a: s64 = 1; return a + 2; }"),
-            Arguments.of(3, "main :: s64 { var a: s64 = 1; var b: s64 = 2; return a + b; }"),
-            Arguments.of(2, "main :: s64 { var a: s64 = 1; a = 2; return a; }"),
-            Arguments.of(4, "main :: s64 { var a: s64; a = 4; return a; }"),
-            Arguments.of(1, "main :: s64 { var a: s64 = 2; if(a > 1) a = 1; return a; }"),
-            Arguments.of(2, "main :: s64 { var a: s64; if(0) a = 1; else a = 2; return a; }"),
+            Arguments.of(3, "main :: s64 { a: s64 = 1; return a + 2; }"),
+            Arguments.of(3, "main :: s64 { a: s64 = 1; b: s64 = 2; return a + b; }"),
+            Arguments.of(2, "main :: s64 { a: s64 = 1; a = 2; return a; }"),
+            Arguments.of(4, "main :: s64 { a: s64; a = 4; return a; }"),
+            Arguments.of(1, "main :: s64 { a: s64 = 2; if(a > 1) a = 1; return a; }"),
+            Arguments.of(2, "main :: s64 { a: s64; if(0) a = 1; else a = 2; return a; }"),
             Arguments.of(3, "main :: s64 { return 0 || 1 ? 3 : 5; }"),
             Arguments.of(63, "main :: s64 { return 0 || 1 && 2 ? 3 + 5 * 12 : 5 / 3 * (1 + 2); }"),
-            Arguments.of(3, "main :: s64 { var a: s64 = 2; if(a > 1) { a = 1; a = a + 2; } return a; }"),
+            Arguments.of(3, "main :: s64 { a: s64 = 2; if(a > 1) { a = 1; a = a + 2; } return a; }"),
             Arguments.of(
                 7,
-                "main :: s64 { var a: s64 = 2; var b: s64 = 4; {a = 3; var b: s64 = 10;} return a + b; }"
+                "main :: s64 { a: s64 = 2; b: s64 = 4; {a = 3; b: s64 = 10;} return a + b; }"
             ),
-            Arguments.of(1, "main :: s64 { var a: s64 = 1; {var a: s64 = 2;} return a; }"),
-            Arguments.of(1, "main :: s64 { var a: s64 = 1; var b: s64 = 2; return a; }")
+            Arguments.of(1, "main :: s64 { a: s64 = 1; {a: s64 = 2;} return a; }"),
+            Arguments.of(1, "main :: s64 { a: s64 = 1; b: s64 = 2; return a; }")
         )
     }
 }

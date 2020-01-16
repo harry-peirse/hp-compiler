@@ -265,46 +265,50 @@ class Ast {
             tokens.poll()
             parseReturn(tokens)
         }
-        Keyword.VAR -> {
-            println("VAR")
-            tokens.poll()
+        IDENTIFIER -> {
             val variableName = tokens.poll()
-            assert(variableName.type == IDENTIFIER)
-            assert(tokens.poll().type == Symbol.COLON)
-            assert(tokens.peek().type.isType)
-            val type = tokens.poll().type.value
-            val result = if (tokens.peek().type == Symbol.OPEN_SQUARE_BRACKET) {
+            if (tokens.peek().type == Symbol.COLON) {
                 tokens.poll()
-                val size = if (tokens.peek().type == Literal.S64) {
-                    val size = tokens.poll().value.toInt()
-                    assert(tokens.poll().type == Symbol.CLOSE_SQUARE_BRACKET)
-                    size
+                assert(tokens.peek().type.isType)
+                val type = tokens.poll().type.value
+                val result = if (tokens.peek().type == Symbol.OPEN_SQUARE_BRACKET) {
+                    tokens.poll()
+                    val size = if (tokens.peek().type == Literal.S64) {
+                        val size = tokens.poll().value.toInt()
+                        assert(tokens.poll().type == Symbol.CLOSE_SQUARE_BRACKET)
+                        size
+                    } else {
+                        assert(tokens.poll().type == Symbol.CLOSE_SQUARE_BRACKET)
+                        null
+                    }
+                    val expression = if (tokens.peek().type == Symbol.ASSIGN) {
+                        tokens.poll()
+                        parseExpression(tokens)
+                    } else null
+                    if (size == null && expression is Expression.ArrayConstant) {
+                        if (context.arraySizes.containsKey(variableName.value)) throw IllegalStateException("" + variableName)
+                        context.arraySizes[variableName.value] = expression.values.size
+                        BlockItem.ArrayDeclaration(variableName.value, type, expression.values.size, expression)
+                    } else if (size != null) {
+                        if (context.arraySizes.containsKey(variableName.value)) throw IllegalStateException("" + variableName)
+                        context.arraySizes[variableName.value] = size
+                        BlockItem.ArrayDeclaration(variableName.value, type, size, expression)
+                    } else throw IllegalStateException()
                 } else {
-                    assert(tokens.poll().type == Symbol.CLOSE_SQUARE_BRACKET)
-                    null
+                    val expression = if (tokens.peek().type == Symbol.ASSIGN) {
+                        tokens.poll()
+                        parseExpression(tokens)
+                    } else null
+                    BlockItem.Declaration(variableName.value, type, expression)
                 }
-                val expression = if (tokens.peek().type == Symbol.ASSIGN) {
-                    tokens.poll()
-                    parseExpression(tokens)
-                } else null
-                if (size == null && expression is Expression.ArrayConstant) {
-                    if (context.arraySizes.containsKey(variableName.value)) throw IllegalStateException("" + variableName)
-                    context.arraySizes[variableName.value] = expression.values.size
-                    BlockItem.ArrayDeclaration(variableName.value, type, expression.values.size, expression)
-                } else if (size != null) {
-                    if (context.arraySizes.containsKey(variableName.value)) throw IllegalStateException("" + variableName)
-                    context.arraySizes[variableName.value] = size
-                    BlockItem.ArrayDeclaration(variableName.value, type, size, expression)
-                } else throw IllegalStateException()
+                if (tokens.peek().type == Symbol.SEMICOLON) tokens.poll()
+                result
             } else {
-                val expression = if (tokens.peek().type == Symbol.ASSIGN) {
-                    tokens.poll()
-                    parseExpression(tokens)
-                } else null
-                BlockItem.Declaration(variableName.value, type, expression)
+                (tokens as Deque<Token>).push(variableName)
+                val result = BlockItem.Statement.ProxyExpression(parseExpression(tokens))
+                if (tokens.peek().type == Symbol.SEMICOLON) tokens.poll()
+                result
             }
-            if (tokens.peek().type == Symbol.SEMICOLON) tokens.poll()
-            result
         }
         Keyword.IF -> {
             tokens.poll()
@@ -333,26 +337,40 @@ class Ast {
             tokens.poll()
             val usingParentheses = tokens.peek().type == Symbol.OPEN_PARENTHESIS
             if (usingParentheses) tokens.poll()
-            if (tokens.peek().type == Keyword.VAR) {
-                val declaration = parseBlockItem(tokens) as BlockItem.Declaration
-                if (tokens.peek().type == Keyword.IN) {
-                    tokens.poll()
-                    assert(tokens.peek().type == IDENTIFIER)
-                    val arrayName = tokens.poll().value
-                    if (usingParentheses) assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
-                    val statement = parseBlockItem(tokens) as BlockItem.Statement
-                    BlockItem.Statement.ForEach(
-                        BlockItem.Declaration(
-                            declaration.variableName, "s64", Expression.Constant("0", "s64")
-                        ), arrayName, statement
-                    )
+            if (tokens.peek().type == IDENTIFIER) {
+                val identifier = tokens.poll()
+                if (tokens.peek().type == Symbol.COLON) {
+                    (tokens as Deque<Token>).push(identifier)
+                    val declaration = parseBlockItem(tokens) as BlockItem.Declaration
+                    if (tokens.peek().type == Keyword.IN) {
+                        tokens.poll()
+                        assert(tokens.peek().type == IDENTIFIER)
+                        val arrayName = tokens.poll().value
+                        if (usingParentheses) assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
+                        val statement = parseBlockItem(tokens) as BlockItem.Statement
+                        BlockItem.Statement.ForEach(
+                            BlockItem.Declaration(
+                                declaration.variableName, "s64", Expression.Constant("0", "s64")
+                            ), arrayName, statement
+                        )
+                    } else {
+                        val condition = parseExpression(tokens)
+                        assert(tokens.poll().type == Symbol.SEMICOLON)
+                        val increment = parseExpression(tokens)
+                        if (usingParentheses) assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
+                        val statement = parseBlockItem(tokens) as BlockItem.Statement
+                        BlockItem.Statement.ForDeclaration(declaration, condition, increment, statement)
+                    }
                 } else {
+                    (tokens as Deque<Token>).push(identifier)
+                    val initialization = parseExpression(tokens)
+                    assert(tokens.poll().type == Symbol.SEMICOLON)
                     val condition = parseExpression(tokens)
                     assert(tokens.poll().type == Symbol.SEMICOLON)
                     val increment = parseExpression(tokens)
                     if (usingParentheses) assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
                     val statement = parseBlockItem(tokens) as BlockItem.Statement
-                    BlockItem.Statement.ForDeclaration(declaration, condition, increment, statement)
+                    BlockItem.Statement.For(initialization, condition, increment, statement)
                 }
             } else {
                 val initialization = parseExpression(tokens)
