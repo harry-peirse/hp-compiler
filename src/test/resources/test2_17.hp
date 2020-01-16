@@ -1,7 +1,7 @@
 main :: s64 {
     floats: f64[] = [1.0, 2.5, 3.5]
 
-    accumulator: f64 = 0.0
+    accumulator: s64 = 0.0
     floats[1] = 4.0
 
     for i: s64 in floats {

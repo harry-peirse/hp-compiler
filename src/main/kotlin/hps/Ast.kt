@@ -175,8 +175,8 @@ sealed class Code {
             override fun prettyPrint() = "$variable[${index.prettyPrint()}]"
         }
 
-        data class ArrayConstant(val values: List<String>) : Expression() {
-            override fun prettyPrint() = "[${values.joinToString(", ")}]"
+        data class ArrayConstant(val values: List<Expression>) : Expression() {
+            override fun prettyPrint() = "[${values.joinToString(", ") { it.prettyPrint() }}]"
         }
 
         data class ArrayAssign(
@@ -465,9 +465,9 @@ class Ast {
             token.type == Symbol.SEMICOLON -> Expression.Empty
             token.type == Symbol.OPEN_SQUARE_BRACKET -> {
                 tokens.poll()
-                val values = mutableListOf<String>()
+                val values = mutableListOf<Expression>()
                 while (tokens.peek().type != Symbol.CLOSE_SQUARE_BRACKET) {
-                    values.add(tokens.poll().value)
+                    values.add(parseExpression(tokens))
                     if (tokens.peek().type == Symbol.COMMA) {
                         tokens.poll()
                     }

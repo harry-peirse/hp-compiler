@@ -80,7 +80,7 @@ class Generator(val context: Context) {
                     "${padding}for (${generateExpression(statement.initialization)}; ${generateExpression(statement.condition)}; ${generateExpression(
                         statement.increment
                     )})\n${generateBlockItem(statement.statement)}"
-                is BlockItem.Statement.ForEach -> "for (${generateBlockItem(
+                is BlockItem.Statement.ForEach -> "${padding}for (${generateBlockItem(
                     statement.declaration,
                     ""
                 )} ${statement.declaration.variableName} < ${context.arraySizes[statement.arrayName]}; ${statement.declaration.variableName}++)\n${generateBlockItem(
