@@ -150,12 +150,13 @@ class Tests {
         println("Lexical Analysis:")
         println(tokens.joinToString("\n") { it.prettyPrint() } + "\n")
 
-        val ast = Ast().parseProgram(tokens)
+        val parser = Ast()
+        val ast = parser.parseProgram(tokens)
         println("Parsed AST:")
         println("${ast.prettyPrint()}\n")
         println("${ast}\n")
 
-        val c = Generator().generateProgram(ast)
+        val c = Generator(parser.context).generateProgram(ast)
         println("Generated C:")
         var lineNumber = 1
         println(c.split("\n").joinToString("\n") { "${lineNumber++}  $it" } + "\n")
@@ -170,7 +171,7 @@ class Tests {
         File(cFileName).writeText(c)
 
         File(executableFileName).takeIf { it.exists() }?.delete()
-        val processBuilder1 = ProcessBuilder("gcc", "-m64", "-g", cFileName, "-o", fileNameWithoutExtension)
+        val processBuilder1 = ProcessBuilder("gcc", "-m32", "-g", cFileName, "-o", fileNameWithoutExtension)
         processBuilder1.redirectErrorStream(true)
         val process1 = processBuilder1.start()
         val bufferedReader1 = BufferedReader(InputStreamReader(process1.inputStream))

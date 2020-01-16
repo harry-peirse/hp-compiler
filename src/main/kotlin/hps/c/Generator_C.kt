@@ -2,8 +2,9 @@ package hps.c
 
 import hps.Code
 import hps.Code.*
+import hps.Context
 
-class Generator {
+class Generator(val context: Context) {
 
     fun toCType(type: String) = when (type) {
         "s64" -> "int"
@@ -69,13 +70,22 @@ class Generator {
                     )}\n$padding}"
                 }
                 is BlockItem.Statement.ForDeclaration ->
-                    "${padding}for (${generateBlockItem(statement.declaration).trim()} ${generateExpression(statement.condition)}; ${generateExpression(
+                    "${padding}for (${generateBlockItem(
+                        statement.declaration,
+                        ""
+                    )} ${generateExpression(statement.condition)}; ${generateExpression(
                         statement.increment
                     )})\n${generateBlockItem(statement.statement)}"
                 is BlockItem.Statement.For ->
                     "${padding}for (${generateExpression(statement.initialization)}; ${generateExpression(statement.condition)}; ${generateExpression(
                         statement.increment
                     )})\n${generateBlockItem(statement.statement)}"
+                is BlockItem.Statement.ForEach -> "for (${generateBlockItem(
+                    statement.declaration,
+                    ""
+                )} ${statement.declaration.variableName} < ${context.arraySizes[statement.arrayName]}; ${statement.declaration.variableName}++)\n${generateBlockItem(
+                    statement.statement
+                )}"
                 is BlockItem.Statement.While -> "${padding}while (${generateExpression(statement.condition)})\n${generateBlockItem(
                     statement.statement
                 )}"
@@ -88,21 +98,25 @@ class Generator {
                     if (localScope.contains(statement.variableName)) throw IllegalStateException("Variable ${statement.variableName} is already declared!")
                     else {
                         localScope.add(statement.variableName)
-                        if(statement.isArray) {
-                            "${padding}${toCType(statement.type)} ${statement.variableName}[${statement.arraySize ?: ""}]${if (statement.expression != null) " = ${generateExpression(
-                                statement.expression
-                            )};" else ";"}"
-                        } else {
-                            "${padding}${toCType(statement.type)} ${statement.variableName}${if (statement.expression != null) " = ${generateExpression(
-                                statement.expression
-                            )};" else ";"}"
-                        }
+                        "${padding}${toCType(statement.type)} ${statement.variableName}${if (statement.expression != null) " = ${generateExpression(
+                            statement.expression
+                        )};" else ";"}"
+                    }
+                is BlockItem.ArrayDeclaration ->
+                    if (localScope.contains(statement.variableName)) throw IllegalStateException("Variable ${statement.variableName} is already declared!")
+                    else {
+                        localScope.add(statement.variableName)
+                        "${padding}${toCType(statement.type)} ${statement.variableName}[${context.arraySizes[statement.variableName]}]${if (statement.expression != null) " = ${generateExpression(
+                            statement.expression
+                        )};" else ";"}"
                     }
             }
 
             private fun generateExpression(expression: Expression): String = when (expression) {
                 is Expression.Constant -> expression.value
-                is Expression.Assign -> "${expression.variableName} ${expression.assignmentToken.value} ${generateExpression(expression.expression)}"
+                is Expression.Assign -> "${expression.variableName} ${expression.assignmentToken.value} ${generateExpression(
+                    expression.expression
+                )}"
                 is Expression.Variable -> expression.variableName
                 is Expression.Nested -> "(${generateExpression(expression.expression)})"
                 is Expression.Conditional -> "${generateExpression(expression.condition)} ? ${generateExpression(
@@ -120,8 +134,10 @@ class Generator {
                     expression.secondExpression
                 )})"
                 is Expression.ArrayCall -> "${expression.variable}[${generateExpression(expression.index)}]"
-                is Expression.ArrayConstant -> "{${expression.values.joinToString(", ") }}"
-                is Expression.ArrayAssign -> "${expression.variableName}[${generateExpression(expression.index)}] ${expression.assignmentToken.value} ${generateExpression(expression.expression)}"
+                is Expression.ArrayConstant -> "{${expression.values.joinToString(", ")}}"
+                is Expression.ArrayAssign -> "${expression.variableName}[${generateExpression(expression.index)}] ${expression.assignmentToken.value} ${generateExpression(
+                    expression.expression
+                )}"
             }
         }
     }

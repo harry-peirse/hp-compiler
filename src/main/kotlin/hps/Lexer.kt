@@ -26,6 +26,7 @@ enum class Keyword(override val value: String, override val isType: Boolean = fa
     CONTINUE("continue"),
     VAR("var"),
     AS("as"),
+    IN("in"),
     VOID("void", true),
     S64("s64", true), // int
     F64("f64", true); // float
