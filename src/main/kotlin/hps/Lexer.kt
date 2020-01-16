@@ -182,41 +182,21 @@ class Lexer {
                 token = when {
                     isLiteralF64(tempToken) || (fileContent.isNotEmpty() && isLiteralF64(
                         tempToken + fileContent.peek()
-                    )) -> Token(
-                        token.row,
-                        token.col,
-                        token.pos,
-                        Literal.F64,
-                        tempToken
-                    )
+                    )) -> Token(token.row, token.col, token.pos, Literal.F64, tempToken)
                     isLiteralS64(tempToken) -> Token(
-                        token.row,
-                        token.col,
-                        token.pos,
-                        Literal.S64,
-                        tempToken
+                        token.row, token.col, token.pos, Literal.S64, tempToken
                     )
                     isSymbol(tempToken) -> Token(
-                        token.row,
-                        token.col,
-                        token.pos,
-                        Symbol.values().find { tempToken == it.value }!!,
-                        tempToken
+                        token.row, token.col, token.pos,
+                        Symbol.values().find { tempToken == it.value }!!, tempToken
                     )
                     isKeyword(tempToken) -> Token(
-                        token.row,
-                        token.col,
-                        token.pos,
-                        Keyword.values().find { tempToken == it.value }!!,
-                        tempToken
+                        token.row, token.col, token.pos,
+                        Keyword.values().find { tempToken == it.value }!!, tempToken
                     )
-                    isIdentifier(tempToken) -> Token(
-                        token.row,
-                        token.col,
-                        token.pos,
-                        IDENTIFIER,
-                        tempToken
-                    )
+                    isIdentifier(tempToken) -> Token(token.row, token.col, token.pos, IDENTIFIER, tempToken)
+                    tempToken.startsWith("'") && tempToken.length == 2 -> Token(token.row, token.col, token.pos, Literal.S64, tempToken)
+                    tempToken.startsWith("'") && tempToken.endsWith("'") && tempToken.length == 3 -> Token(token.row, token.col, token.pos, Literal.S64, "" + tempToken[1].toInt())
                     else -> {
                         tokens.add(token)
                         null
@@ -227,40 +207,17 @@ class Lexer {
                 val tempToken = "$char"
                 token = when {
                     isSymbol(tempToken) -> Token(
-                        row,
-                        col,
-                        pos,
-                        Symbol.values().find { tempToken == it.value }!!,
-                        tempToken
+                        row, col, pos,
+                        Symbol.values().find { tempToken == it.value }!!, tempToken
                     )
                     isKeyword(tempToken) -> Token(
-                        row,
-                        col,
-                        pos,
-                        Keyword.values().find { tempToken == it.value }!!,
-                        tempToken
+                        row, col, pos,
+                        Keyword.values().find { tempToken == it.value }!!, tempToken
                     )
-                    isIdentifier(tempToken) -> Token(
-                        row,
-                        col,
-                        pos,
-                        IDENTIFIER,
-                        tempToken
-                    )
-                    isLiteralS64(tempToken) -> Token(
-                        row,
-                        col,
-                        pos,
-                        Literal.S64,
-                        tempToken
-                    )
-                    isLiteralF64(tempToken) -> Token(
-                        row,
-                        col,
-                        pos,
-                        Literal.F64,
-                        tempToken
-                    )
+                    isIdentifier(tempToken) -> Token(row, col, pos, IDENTIFIER, tempToken)
+                    isLiteralS64(tempToken) -> Token(row, col, pos, Literal.S64, tempToken)
+                    isLiteralF64(tempToken) -> Token(row, col, pos, Literal.F64, tempToken)
+                    tempToken == "'" -> Token(row, col, pos, Literal.S64, tempToken)
                     tempToken == "\n" -> {
                         row++
                         col = -1
