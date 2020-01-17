@@ -219,6 +219,10 @@ class Ast {
                 assert(tokens.poll().type == Symbol.COLON)
                 assert(tokens.peek().type.isType)
                 val argumentType = tokens.poll().type.value
+                if(tokens.peek().type == Symbol.OPEN_SQUARE_BRACKET) {
+                    tokens.poll()
+                    assert(tokens.poll().type == Symbol.CLOSE_SQUARE_BRACKET)
+                }
                 arguments.add(Argument(argumentName, argumentType))
                 if (tokens.peek().type == Symbol.COMMA) tokens.poll()
             }

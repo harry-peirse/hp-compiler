@@ -1,8 +1,6 @@
+print :: (string: s64[]) -> void = for c: s64 in string putchar(c)
+
 main :: s64 {
-    putchar('H')
-    putchar('e')
-    putchar('l')
-    putchar('l')
-    putchar('o')
+    print("Hello world")
     0
 }
