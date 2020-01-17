@@ -1,6 +1,6 @@
 //package com.aal.hp.x64.com.aal.hp.x64
 //
-//import hps.Ast
+//import hps.c.Ast
 //import hps.Lexer
 //import hps.atomicInt
 //import hps.x64.Generator

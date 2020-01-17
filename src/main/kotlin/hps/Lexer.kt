@@ -14,8 +14,7 @@ interface TokenType {
     val isType: Boolean
 }
 
-enum class Keyword(override val value: String, override val isType: Boolean = false) :
-    TokenType {
+enum class Keyword(override val value: String, override val isType: Boolean = false) : TokenType {
     RETURN("return"),
     IF("if"),
     ELSE("else"),
@@ -24,12 +23,10 @@ enum class Keyword(override val value: String, override val isType: Boolean = fa
     WHILE("while"),
     BREAK("break"),
     CONTINUE("continue"),
-    //    VAR("var"),
-    AS("as"),
-    IN("in"),
     VOID("void", true),
-    S64("s64", true), // int
-    F64("f64", true); // float
+    INT("int", true),
+    FLOAT("float", true),
+    CHAR("char", true);
 
     override val category = "Keyword"
     override val isBinary = false
@@ -103,10 +100,10 @@ enum class Symbol(
 }
 
 enum class Literal(override val value: String) : TokenType {
-    S64("s64"),
-    F64("f64"),
-    CHAR("s64"),
-    STRING("s64[]");
+    INT("int"),
+    FLOAT("float"),
+    CHAR("char"),
+    STRING("char[]");
 
     override val category = "Literal"
     override val isBinary = false
@@ -184,9 +181,9 @@ class Lexer {
                 token = when {
                     isLiteralF64(tempToken) || (fileContent.isNotEmpty() && isLiteralF64(
                         tempToken + fileContent.peek()
-                    )) -> Token(token.row, token.col, token.pos, Literal.F64, tempToken)
+                    )) -> Token(token.row, token.col, token.pos, Literal.FLOAT, tempToken)
                     isLiteralS64(tempToken) -> Token(
-                        token.row, token.col, token.pos, Literal.S64, tempToken
+                        token.row, token.col, token.pos, Literal.INT, tempToken
                     )
                     isSymbol(tempToken) -> Token(
                         token.row, token.col, token.pos,
@@ -201,7 +198,7 @@ class Lexer {
                         token.row,
                         token.col,
                         token.pos,
-                        Literal.S64,
+                        Literal.CHAR,
                         tempToken
                     )
                     tempToken.startsWith("'") && tempToken.endsWith("'") && tempToken.length == 3 -> Token(
@@ -209,21 +206,35 @@ class Lexer {
                         token.col,
                         token.pos,
                         Literal.CHAR,
-                        "" + tempToken[1].toInt()
+                        "" + tempToken[1]
                     )
-                    tempToken.startsWith("\"") && tempToken.count { it == '\"' } == 1 -> Token(
+                    tempToken.replace("\\\"", "").startsWith("\"") && tempToken.replace(
+                        "\\\"",
+                        ""
+                    ).count { it == '\"' } == 1 -> Token(
                         token.row,
                         token.col,
                         token.pos,
                         Literal.STRING,
                         tempToken
                     )
-                    tempToken.startsWith("\"") && tempToken.endsWith("\"") -> {
+                    tempToken.replace("\\\"", "").startsWith("\"") && tempToken.replace("\\\"", "").endsWith("\"") -> {
                         Token(token.row, token.col, token.pos, Literal.STRING, tempToken)
                     }
                     else -> {
                         if (token.type == Literal.STRING) {
-                            token = Token(token.row, token.col, token.pos, Literal.STRING, token.value.replace("\"", ""))
+                            token =
+                                Token(
+                                    token.row, token.col, token.pos, Literal.STRING, token.value
+                                        .substring(1, token.value.length - 2)
+                                        .replace("\\b", "\b")
+                                        .replace("\\n", "\n")
+                                        .replace("\\r", "\r")
+                                        .replace("\\t", "\t")
+                                        .replace("\\\\", "\\")
+                                        .replace("\\'", "''")
+                                        .replace("\\\"", "\"")
+                                )
                         }
                         tokens.add(token)
                         null
@@ -242,8 +253,8 @@ class Lexer {
                         Keyword.values().find { tempToken == it.value }!!, tempToken
                     )
                     isIdentifier(tempToken) -> Token(row, col, pos, IDENTIFIER, tempToken)
-                    isLiteralS64(tempToken) -> Token(row, col, pos, Literal.S64, tempToken)
-                    isLiteralF64(tempToken) -> Token(row, col, pos, Literal.F64, tempToken)
+                    isLiteralS64(tempToken) -> Token(row, col, pos, Literal.INT, tempToken)
+                    isLiteralF64(tempToken) -> Token(row, col, pos, Literal.FLOAT, tempToken)
                     tempToken == "'" -> Token(row, col, pos, Literal.CHAR, tempToken)
                     tempToken == "\"" -> Token(row, col, pos, Literal.STRING, tempToken)
                     tempToken == "\n" -> {
@@ -261,7 +272,17 @@ class Lexer {
 
         if (token != null) {
             if (token.type == Literal.STRING) {
-                token = Token(token.row, token.col, token.pos, Literal.STRING, token.value.replace("\"", ""))
+                token = Token(
+                    token.row, token.col, token.pos, Literal.STRING, token.value
+                        .substring(1, token.value.length - 2)
+                        .replace("\\b", "\b")
+                        .replace("\\n", "\n")
+                        .replace("\\r", "\r")
+                        .replace("\\t", "\t")
+                        .replace("\\\\", "\\")
+                        .replace("\\'", "''")
+                        .replace("\\\"", "\"")
+                )
             }
             tokens.add(token)
         }

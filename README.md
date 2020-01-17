@@ -26,3 +26,17 @@ What's going on here?
 - `return` precedes the expression to be returned by the function.
 - Functions need to have a body defined by braces.
 - Every statement should end with a semicolon.
+
+
+function :: (arg: type, varargs: type...) -> type, type... {
+    variable: type
+    variable: type = expression
+    variable:= expression
+    a: type, b: type[] = function(a, b, c)
+    0
+}
+
+function :: () -> type {0}
+function :: {}
+function :: () -> type = 0
+function ::= 0
