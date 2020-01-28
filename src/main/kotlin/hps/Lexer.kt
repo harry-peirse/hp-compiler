@@ -39,6 +39,7 @@ enum class Keyword(override val value: String, override val isType: Boolean = fa
     STRUCT("struct"),
     UNION("union"),
     ENUM("enum"),
+    EXTERNAL("external"),
     TYPEDEF("typedef");
 
     override val category = "Keyword"
@@ -248,20 +249,19 @@ class Lexer {
                         Keyword.values().find { tempToken == it.value }!!, tempToken
                     )
                     isIdentifier(tempToken) -> Token(token.row, token.col, token.pos, IDENTIFIER, tempToken)
-                    tempToken.startsWith("'") && tempToken.length == 2 -> Token(
+                    tempToken.replace("\\'", "").startsWith("'") && tempToken.replace(
+                        "\\'",
+                        "'"
+                    ).count { it == '\'' } == 1 -> Token(
                         token.row,
                         token.col,
                         token.pos,
                         Literal.CHAR,
                         tempToken
                     )
-                    tempToken.startsWith("'") && tempToken.endsWith("'") && tempToken.length == 3 -> Token(
-                        token.row,
-                        token.col,
-                        token.pos,
-                        Literal.CHAR,
-                        "" + tempToken[1]
-                    )
+                    tempToken.replace("\\'", "").startsWith("'") && tempToken.replace("\\'", "").endsWith("'") -> {
+                        Token(token.row, token.col, token.pos, Literal.CHAR, tempToken)
+                    }
                     tempToken.replace("\\\"", "").startsWith("\"") && tempToken.replace(
                         "\\\"",
                         ""
@@ -276,19 +276,18 @@ class Lexer {
                         Token(token.row, token.col, token.pos, Literal.STRING, tempToken)
                     }
                     else -> {
-                        if (token.type == Literal.STRING) {
-                            token =
-                                Token(
-                                    token.row, token.col, token.pos, Literal.STRING, token.value
-                                        .substring(1, token.value.length - 2)
-                                        .replace("\\b", "\b")
-                                        .replace("\\n", "\n")
-                                        .replace("\\r", "\r")
-                                        .replace("\\t", "\t")
-                                        .replace("\\\\", "\\")
-                                        .replace("\\'", "''")
-                                        .replace("\\\"", "\"")
-                                )
+                        if (token.type == Literal.STRING || token.type == Literal.CHAR) {
+                            token = Token(
+                                token.row, token.col, token.pos, token.type, token.value
+                                    .substring(1, token.value.length - 1)
+//                                    .replace("\\b", "\b")
+//                                    .replace("\\n", "\n")
+//                                    .replace("\\r", "\r")
+//                                    .replace("\\t", "\t")
+//                                    .replace("\\\\", "\\")
+//                                    .replace("\\'", "'")
+//                                    .replace("\\\"", "\"")
+                            )
                         }
                         tokens.add(token)
                         null
@@ -325,17 +324,17 @@ class Lexer {
         }
 
         if (token != null) {
-            if (token.type == Literal.STRING) {
+            if (token.type == Literal.STRING || token.type == Literal.CHAR) {
                 token = Token(
-                    token.row, token.col, token.pos, Literal.STRING, token.value
-                        .substring(1, token.value.length - 2)
-                        .replace("\\b", "\b")
-                        .replace("\\n", "\n")
-                        .replace("\\r", "\r")
-                        .replace("\\t", "\t")
-                        .replace("\\\\", "\\")
-                        .replace("\\'", "''")
-                        .replace("\\\"", "\"")
+                    token.row, token.col, token.pos, token.type, token.value
+                        .substring(1, token.value.length - 1)
+//                        .replace("\\b", "\b")
+//                        .replace("\\n", "\n")
+//                        .replace("\\r", "\r")
+//                        .replace("\\t", "\t")
+//                        .replace("\\\\", "\\")
+//                        .replace("\\'", "'")
+//                        .replace("\\\"", "\"")
                 )
             }
             tokens.add(token)

@@ -16,27 +16,55 @@ sealed class CCode {
         override fun toC(): String = "${type.value} ${name.value}"
     }
 
-    data class Function(
-        val type: Token,
-        val name: Token,
-        val arguments: List<Argument>,
-        val blockItems: List<BlockItem>
-    ) : CCode() {
-        override fun toC() =
-            "${type.value} ${name.value}(${arguments.joinToString(", ") { it.toC() }})\n{\n${blockItems.joinToString("\n") { it.toC() }}\n}\n"
+    sealed class Function : CCode() {
+
+        abstract val type: Token
+        abstract val name: Token
+        abstract val arguments: List<Argument>
+
+        data class Implementation(
+            override val type: Token,
+            override val name: Token,
+            override val arguments: List<Argument>,
+            val blockItems: List<BlockItem>
+        ) : Function() {
+
+            override fun toC() =
+                "${type.value} ${name.value}(${arguments.joinToString(", ") { it.toC() }})\n{\n${blockItems.joinToString(
+                    "\n"
+                ) { it.toC() }}\n}\n"
+        }
+
+        data class External(
+            override val type: Token,
+            override val name: Token,
+            override val arguments: List<Argument>
+        ) : Function() {
+            override fun toC() = ""
+        }
     }
 
     sealed class BlockItem : CCode() {
         override fun toC() = toC(1)
         abstract fun toC(depth: Int, skipInitialTab: Boolean = false): String
+        abstract fun blockItems(): List<BlockItem>
+        abstract fun expressions(): List<Expression>
 
         sealed class Statement : BlockItem() {
             data class Return(val expression: Expression) : Statement() {
-                override fun toC(depth: Int, skipInitialTab: Boolean) = "${if(skipInitialTab) "" else "\t".repeat(depth)}return ${expression.toC()};"
+                override fun toC(depth: Int, skipInitialTab: Boolean) =
+                    "${if (skipInitialTab) "" else "\t".repeat(depth)}return ${expression.toC()};"
+
+                override fun blockItems() = emptyList<BlockItem>()
+                override fun expressions() = listOf(expression)
             }
 
             data class ProxyExpression(val expression: Expression) : Statement() {
-                override fun toC(depth: Int, skipInitialTab: Boolean) = "${if(skipInitialTab) "" else "\t".repeat(depth)}${expression.toC()};"
+                override fun toC(depth: Int, skipInitialTab: Boolean) =
+                    "${if (skipInitialTab) "" else "\t".repeat(depth)}${expression.toC()};"
+
+                override fun blockItems() = emptyList<BlockItem>()
+                override fun expressions() = listOf(expression)
             }
 
             data class Conditional(
@@ -46,12 +74,25 @@ sealed class CCode {
             ) :
                 Statement() {
                 override fun toC(depth: Int, skipInitialTab: Boolean) =
-                    "${if(skipInitialTab) "" else "\t".repeat(depth)}if(${condition.toC()})\n${statement.toC(depth + 1)}${if (elseStatement != null) "\n${"\t".repeat(depth)}else${if (elseStatement is Compound) "\n${elseStatement.toC(depth + 1)}" else " ${elseStatement.toC(depth, true)}"}" else ""}"
+                    "${if (skipInitialTab) "" else "\t".repeat(depth)}if(${condition.toC()})\n${statement.toC(depth + 1)}${if (elseStatement != null) "\n${"\t".repeat(
+                        depth
+                    )}else${if (elseStatement is Compound) "\n${elseStatement.toC(depth + 1)}" else " ${elseStatement.toC(
+                        depth,
+                        true
+                    )}"}" else ""}"
+
+                override fun blockItems() = listOfNotNull<BlockItem>(statement, elseStatement)
+                override fun expressions() = listOf(condition)
             }
 
             data class Compound(val blockItems: List<BlockItem>) : Statement() {
                 override fun toC(depth: Int, skipInitialTab: Boolean) =
-                    "${if(skipInitialTab) "" else "\t".repeat(depth)}{\n${blockItems.joinToString("\n") { it.toC(depth + 1) }}\n${"\t".repeat(depth)}}"
+                    "${if (skipInitialTab) "" else "\t".repeat(depth)}{\n${blockItems.joinToString("\n") { it.toC(depth + 1) }}\n${"\t".repeat(
+                        depth
+                    )}}"
+
+                override fun blockItems() = blockItems
+                override fun expressions() = emptyList<Expression>()
             }
 
             data class For(
@@ -61,9 +102,12 @@ sealed class CCode {
                 val statement: Statement
             ) : Statement() {
                 override fun toC(depth: Int, skipInitialTab: Boolean) =
-                    "${if(skipInitialTab) "" else "\t".repeat(depth)}for(${initialization.toC()}; ${if (condition is Expression.Empty) "1" else condition.toC()}; ${increment.toC()}) \n${statement.toC(
+                    "${if (skipInitialTab) "" else "\t".repeat(depth)}for(${initialization.toC()}; ${if (condition is Expression.Empty) "1" else condition.toC()}; ${increment.toC()}) \n${statement.toC(
                         depth + 1
                     )}"
+
+                override fun blockItems() = listOf<BlockItem>(statement)
+                override fun expressions() = listOf(initialization, condition, increment)
             }
 
             data class ForDeclaration(
@@ -73,29 +117,48 @@ sealed class CCode {
                 val statement: Statement
             ) : Statement() {
                 override fun toC(depth: Int, skipInitialTab: Boolean) =
-                    "${if(skipInitialTab) "" else "\t".repeat(depth)}for(${declaration.toC(0)} ${if (condition is Expression.Empty) "1" else condition.toC()}; ${increment.toC()}) \n${statement.toC(
+                    "${if (skipInitialTab) "" else "\t".repeat(depth)}for(${declaration.toC(0)} ${if (condition is Expression.Empty) "1" else condition.toC()}; ${increment.toC()}) \n${statement.toC(
                         depth
                     )}"
+
+                override fun blockItems() = listOf(declaration, statement)
+                override fun expressions() = listOf(condition, increment)
             }
 
             data class While(val condition: Expression, val statement: Statement) :
                 Statement() {
                 override fun toC(depth: Int, skipInitialTab: Boolean) =
-                    "${if(skipInitialTab) "" else "\t".repeat(depth)}while(${condition.toC()}) \n${statement.toC(depth + 1)}"
+                    "${if (skipInitialTab) "" else "\t".repeat(depth)}while(${condition.toC()}) \n${statement.toC(depth + 1)}"
+
+                override fun blockItems() = listOf<BlockItem>(statement)
+                override fun expressions() = listOf(condition)
             }
 
             data class DoWhile(val statement: Statement, val condition: Expression) :
                 Statement() {
                 override fun toC(depth: Int, skipInitialTab: Boolean) =
-                    "${"\t".repeat(depth)}do \n${statement.toC(depth + 1)} \n${if(skipInitialTab) "" else "\t".repeat(depth)}while (${condition.toC()});"
+                    "${"\t".repeat(depth)}do \n${statement.toC(depth + 1)} \n${if (skipInitialTab) "" else "\t".repeat(
+                        depth
+                    )}while (${condition.toC()});"
+
+                override fun blockItems() = listOf<BlockItem>(statement)
+                override fun expressions() = listOf(condition)
             }
 
             object Break : Statement() {
-                override fun toC(depth: Int, skipInitialTab: Boolean) = "${if(skipInitialTab) "" else "\t".repeat(depth)}break;"
+                override fun toC(depth: Int, skipInitialTab: Boolean) =
+                    "${if (skipInitialTab) "" else "\t".repeat(depth)}break;"
+
+                override fun blockItems() = emptyList<BlockItem>()
+                override fun expressions() = emptyList<Expression>()
             }
 
             object Continue : Statement() {
-                override fun toC(depth: Int, skipInitialTab: Boolean) = "${if(skipInitialTab) "" else "\t".repeat(depth)}continue;"
+                override fun toC(depth: Int, skipInitialTab: Boolean) =
+                    "${if (skipInitialTab) "" else "\t".repeat(depth)}continue;"
+
+                override fun blockItems() = emptyList<BlockItem>()
+                override fun expressions() = emptyList<Expression>()
             }
         }
 
@@ -105,7 +168,11 @@ sealed class CCode {
             val expression: Expression?
         ) : BlockItem() {
             override fun toC(depth: Int, skipInitialTab: Boolean) =
-                "${if(skipInitialTab) "" else "\t".repeat(depth)}${type.value} ${name.value} = ${expression?.toC() ?: ""};"
+                "${if (skipInitialTab) "" else "\t".repeat(depth)}${type.value} ${name.value} = ${expression?.toC()
+                    ?: ""};"
+
+            override fun blockItems() = emptyList<BlockItem>()
+            override fun expressions() = listOfNotNull(expression)
         }
 
         data class ArrayDeclaration(
@@ -114,25 +181,36 @@ sealed class CCode {
             val expression: Expression?
         ) : BlockItem() {
             override fun toC(depth: Int, skipInitialTab: Boolean) =
-                "${if(skipInitialTab) "" else "\t".repeat(depth)}${type.value} ${name.value}[] = ${expression?.toC() ?: ""};"
+                "${if (skipInitialTab) "" else "\t".repeat(depth)}${type.value} ${name.value}[] = ${expression?.toC()
+                    ?: ""};"
+
+            override fun blockItems() = emptyList<BlockItem>()
+            override fun expressions() = listOfNotNull(expression)
         }
     }
 
     sealed class Expression : CCode() {
+
+        abstract fun flattened(): List<Expression>
+
         data class Constant(val value: Token) : Expression() {
             override fun toC() = when (value.type) {
                 Literal.CHAR -> "'${value.value}'"
                 else -> value.value
             }
+
+            override fun flattened() = listOf(this)
         }
 
         data class ArrayConstant(val type: Token, val values: List<Expression>) :
             Expression() {
             override fun toC() = "{${values.joinToString(", ") { it.toC() }}}"
+            override fun flattened() = values.flatMap { it.flattened() } + this
         }
 
         data class Unary(val unaryOp: Token, val expression: Expression) : Expression() {
             override fun toC() = "(${unaryOp.value}${expression.toC()})"
+            override fun flattened() = expression.flattened() + this
         }
 
         data class Binary(
@@ -142,10 +220,12 @@ sealed class CCode {
         ) :
             Expression() {
             override fun toC() = "(${firstExpression.toC()}${binaryOp.value}${secondExpression.toC()})"
+            override fun flattened() = firstExpression.flattened() + secondExpression.flattened() + this
         }
 
         data class Nested(val expression: Expression) : Expression() {
             override fun toC() = expression.toC()
+            override fun flattened() = expression.flattened() + this
         }
 
         data class Assign(
@@ -155,6 +235,7 @@ sealed class CCode {
         ) :
             Expression() {
             override fun toC() = "${name.value} ${assignment.value} ${expression.toC()}"
+            override fun flattened() = expression.flattened() + this
         }
 
         data class AssignArrayIndex(
@@ -165,14 +246,17 @@ sealed class CCode {
         ) :
             Expression() {
             override fun toC() = "${name.value}[${index.toC()}] ${assignment.value} ${expression.toC()}"
+            override fun flattened() = index.flattened() + expression.flattened() + this
         }
 
         data class Variable(val name: Token) : Expression() {
             override fun toC() = name.value
+            override fun flattened() = listOf(this)
         }
 
         data class ArrayVariable(val name: Token, val index: Expression) : Expression() {
             override fun toC() = "${name.value}[${index.toC()}]"
+            override fun flattened() = index.flattened() + this
         }
 
         data class Conditional(
@@ -182,14 +266,18 @@ sealed class CCode {
         ) :
             Expression() {
             override fun toC() = "${condition.toC()} ? ${expression.toC()} : ${elseExpression.toC()}"
+            override fun flattened() =
+                condition.flattened() + expression.flattened() + elseExpression.flattened() + this
         }
 
         object Empty : Expression() {
             override fun toC() = ""
+            override fun flattened() = listOf(this)
         }
 
         data class FunctionCall(val name: Token, val arguments: List<Expression>) : Expression() {
             override fun toC() = "${name.value}(${arguments.joinToString(", ") { it.toC() }})"
+            override fun flattened() = arguments.flatMap { it.flattened() } + this
         }
     }
 }
@@ -205,6 +293,10 @@ class Ast {
     }
 
     private fun parseFunction(tokens: Queue<Token>): Function {
+        val external = if (tokens.peek().type == Keyword.EXTERNAL) {
+            tokens.poll()
+            true
+        } else false
         val returnType = tokens.poll()
         assert(returnType.type.isType)
         val name = tokens.poll()
@@ -219,13 +311,15 @@ class Ast {
             if (tokens.peek().type == Symbol.COMMA) tokens.poll()
         }
         assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
-        assert(tokens.poll().type == Symbol.OPEN_BRACE)
-        val blockItems = mutableListOf<BlockItem>()
-        while (tokens.peek().type != Symbol.CLOSE_BRACE) {
-            blockItems.add(parseBlockItem(tokens))
-        }
-        assert(tokens.poll().type == Symbol.CLOSE_BRACE)
-        return Function(returnType, name, arguments, blockItems)
+        if (!external) {
+            assert(tokens.poll().type == Symbol.OPEN_BRACE)
+            val blockItems = mutableListOf<BlockItem>()
+            while (tokens.peek().type != Symbol.CLOSE_BRACE) {
+                blockItems.add(parseBlockItem(tokens))
+            }
+            assert(tokens.poll().type == Symbol.CLOSE_BRACE)
+            return Function.Implementation(returnType, name, arguments, blockItems)
+        } else return Function.External(returnType, name, arguments)
     }
 
     private fun parseBlockItem(tokens: Queue<Token>): BlockItem {

@@ -1,3 +1,5 @@
+external void putchar(char c)
+
 int main() {
     putchar('H');
     putchar('e');
@@ -16,5 +18,11 @@ int main() {
     int[] array = [1,2,3];
     array[1] = 4;
 
-    return array[0] + array[1];
+    putchar('\n');
+
+    int result = array[0] + array[1];
+
+    putchar('0' + result);
+
+    return result;
 }

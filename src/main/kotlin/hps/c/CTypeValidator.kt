@@ -1,26 +1,31 @@
 package hps.c
 
-data class FunctionSignature(val returnType: String, val name: String, val arguments: List<Pair<String, String>>)
-
 class Validator {
 
-    private val functionSignatures = mutableListOf<FunctionSignature>()
-
     fun validate(program: CCode.Program): String {
-        program.functions.map { func ->
-            FunctionSignature(
-                func.type.value,
-                func.name.value,
-                func.arguments.map { arg -> arg.type.value to arg.name.value }.toList()
-            )
-        }.toCollection(functionSignatures)
+        val funcSigByName = program.functions.associateBy { it.name.value }
+        val funcsToForwardDeclare = mutableSetOf<CCode.Function.Implementation>()
 
-        return functionSignatures.joinToString("\n") { func ->
-            func.run {
-                "$returnType $name(${arguments.joinToString(", ") { args ->
-                    args.run { "$first $second" }
-                }});"
+        program.functions
+            .filterIsInstance<CCode.Function.Implementation>()
+            .flatMap { it.blockItems }
+            .flatMap { it.expressions() + it.blockItems().flatMap { bi -> bi.expressions() } }
+            .flatMap { it.flattened() }
+            .filterIsInstance<CCode.Expression.FunctionCall>()
+            .forEach {
+                if (!program.functions.map { func -> func.name.value }
+                        .contains(it.name.value)) throw IllegalStateException("Unknown Function call: ${it.name}")
+                if ((it.name.pos < funcSigByName[it.name.value]?.type?.pos ?: error("ERROR")) && funcSigByName[it.name.value]
+                        ?: error("ERROR") is CCode.Function.Implementation
+                ) {
+                    funcsToForwardDeclare.add(funcSigByName[it.name.value] as CCode.Function.Implementation)
+                }
             }
-        } + "\n\n" + program.toC()
+
+        return funcsToForwardDeclare.joinToString("") {
+            "${it.type.value} ${it.name.value}(${it.arguments.joinToString(
+                ", "
+            ) { arg -> "${arg.type.value} ${arg.name.value}" }});\n\n"
+        } + program.toC()
     }
 }
