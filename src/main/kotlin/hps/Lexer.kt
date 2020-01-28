@@ -23,10 +23,23 @@ enum class Keyword(override val value: String, override val isType: Boolean = fa
     WHILE("while"),
     BREAK("break"),
     CONTINUE("continue"),
+    SWITCH("switch"),
+    CASE("case"),
+    CONST("const"),
+    DEFAULT("default"),
+    SIGNED("signed"),
+    UNSIGNED("unsigned"),
     VOID("void", true),
+    SHORT("short", true),
     INT("int", true),
+    LONG("long", true),
     FLOAT("float", true),
-    CHAR("char", true);
+    DOUBLE("double", true),
+    CHAR("char", true),
+    STRUCT("struct"),
+    UNION("union"),
+    ENUM("enum"),
+    TYPEDEF("typedef");
 
     override val category = "Keyword"
     override val isBinary = false
@@ -66,9 +79,9 @@ enum class Symbol(
     PLUS("+", 4, isBinary = true, isUnary = true),
     ASTERISK("*", 3, isBinary = true, isUnary = true),
     SLASH("/", 3, isBinary = true),
-    BITWISE_AND("&", 8, isBinary = true),
-    BITWISE_OR("|", 10, isBinary = true),
-    BITWISE_XOR("^", 9, isBinary = true),
+    AMPERSAND("&", 8, isBinary = true, isUnary = true),
+    BAR("|", 10, isBinary = true),
+    UP_TICK("^", 9, isBinary = true),
     BITWISE_SHIFT_LEFT("<<", 5, isBinary = true),
     BITWISE_SHIFT_RIGHT(">>", 5, isBinary = true),
     MODULUS("%", 3, isBinary = true, isUnary = true),
@@ -94,14 +107,21 @@ enum class Symbol(
     BITWISE_OR_ASSIGN("|="),
     BITWISE_XOR_ASSIGN("^="),
     INCREMENT("++", isUnary = true, isPostfix = true),
-    DECREMENT("--", isUnary = true, isPostfix = true);
+    DECREMENT("--", isUnary = true, isPostfix = true),
+    SIZEOF("sizeof", isUnary = true);
 
     override val category = "Symbol"
 }
 
 enum class Literal(override val value: String) : TokenType {
     INT("int"),
+    UNSIGNED_INT("unsigned int"),
+    LONG("long"),
+    UNSIGNED_LONG("unsigned long"),
+    LONG_LONG("long long"),
+    UNSIGNED_LONG_LONG("unsigned long long"),
     FLOAT("float"),
+    DOUBLE("double"),
     CHAR("char"),
     STRING("char[]");
 
@@ -151,9 +171,25 @@ data class Token(
 
 fun isKeyword(value: String) = Keyword.values().map { it.value }.contains(value)
 fun isSymbol(value: String) = Symbol.values().map { it.value }.contains(value)
-fun isIdentifier(value: String) = "^([a-z]|[A-Z]|_|\$)([a-z]|[A-Z]|[0-9]|_|\$)*$".toRegex().matches(value)
-fun isLiteralS64(value: String) = "^([0-9])+$".toRegex().matches(value)
-fun isLiteralF64(value: String) = "^([0-9])*\\.([0-9])+$".toRegex().matches(value)
+fun isIdentifier(value: String) = "^([a-z]|[A-Z]|_|\$)([a-zA-Z0-9]|_|\$)*$".toRegex().matches(value)
+fun isLiteralInt(value: String) = "^([0-9]+|(0[bB](0-1)+)|(0([0-7])+)|(0[xX]([0-9a-fA-F])+))$".toRegex().matches(value)
+fun isLiteralUnsignedInt(value: String) =
+    "^([0-9]+|(0[bB](0-1)+)|(0([0-7])+)|(0[xX]([0-9a-fA-F])+))+([Uu])$".toRegex().matches(value)
+
+fun isLiteralLong(value: String) =
+    "^([0-9]+|(0[bB](0-1)+)|(0([0-7])+)|(0[xX]([0-9a-fA-F])+))+([Ll])$".toRegex().matches(value)
+
+fun isLiteralUnsignedLong(value: String) =
+    "^([0-9]+|(0[bB](0-1)+)|(0([0-7])+)|(0[xX]([0-9a-fA-F])+))+([Uu][Ll])$".toRegex().matches(value)
+
+fun isLiteralLongLong(value: String) =
+    "^([0-9]+|(0[bB](0-1)+)|(0([0-7])+)|(0[xX]([0-9a-fA-F])+))+([Ll])([Ll])$".toRegex().matches(value)
+
+fun isLiteralUnsignedLongLong(value: String) =
+    "^([0-9]+|(0[bB](0-1)+)|(0([0-7])+)|(0[xX]([0-9a-fA-F])+))+([Uu][Ll])([Ll])$".toRegex().matches(value)
+
+fun isLiteralFloat(value: String) = "^([0-9])+\\.([0-9])+([Ff])$".toRegex().matches(value)
+fun isLiteralDouble(value: String) = "^([0-9])+\\.([0-9])+[Dd]?$".toRegex().matches(value)
 
 class Lexer {
     fun lex(fileName: String): Queue<Token> {
@@ -179,10 +215,28 @@ class Lexer {
             if (token != null) {
                 val tempToken = "${token.value}$char"
                 token = when {
-                    isLiteralF64(tempToken) || (fileContent.isNotEmpty() && isLiteralF64(
+                    isLiteralFloat(tempToken) || (fileContent.isNotEmpty() && isLiteralFloat(
                         tempToken + fileContent.peek()
                     )) -> Token(token.row, token.col, token.pos, Literal.FLOAT, tempToken)
-                    isLiteralS64(tempToken) -> Token(
+                    isLiteralDouble(tempToken) || (fileContent.isNotEmpty() && isLiteralDouble(
+                        tempToken + fileContent.peek()
+                    )) -> Token(token.row, token.col, token.pos, Literal.DOUBLE, tempToken)
+                    isLiteralUnsignedLongLong(tempToken) || (fileContent.isNotEmpty() && isLiteralUnsignedLongLong(
+                        tempToken + fileContent.peek()
+                    )) -> Token(token.row, token.col, token.pos, Literal.UNSIGNED_LONG_LONG, tempToken)
+                    isLiteralLongLong(tempToken) || (fileContent.isNotEmpty() && isLiteralLongLong(
+                        tempToken + fileContent.peek()
+                    )) -> Token(token.row, token.col, token.pos, Literal.LONG_LONG, tempToken)
+                    isLiteralUnsignedLong(tempToken) || (fileContent.isNotEmpty() && isLiteralUnsignedLong(
+                        tempToken + fileContent.peek()
+                    )) -> Token(token.row, token.col, token.pos, Literal.UNSIGNED_LONG, tempToken)
+                    isLiteralLong(tempToken) || (fileContent.isNotEmpty() && isLiteralLong(
+                        tempToken + fileContent.peek()
+                    )) -> Token(token.row, token.col, token.pos, Literal.LONG, tempToken)
+                    isLiteralUnsignedInt(tempToken) || (fileContent.isNotEmpty() && isLiteralUnsignedInt(
+                        tempToken + fileContent.peek()
+                    )) -> Token(token.row, token.col, token.pos, Literal.UNSIGNED_INT, tempToken)
+                    isLiteralInt(tempToken) -> Token(
                         token.row, token.col, token.pos, Literal.INT, tempToken
                     )
                     isSymbol(tempToken) -> Token(
@@ -253,8 +307,8 @@ class Lexer {
                         Keyword.values().find { tempToken == it.value }!!, tempToken
                     )
                     isIdentifier(tempToken) -> Token(row, col, pos, IDENTIFIER, tempToken)
-                    isLiteralS64(tempToken) -> Token(row, col, pos, Literal.INT, tempToken)
-                    isLiteralF64(tempToken) -> Token(row, col, pos, Literal.FLOAT, tempToken)
+                    isLiteralInt(tempToken) -> Token(row, col, pos, Literal.INT, tempToken)
+                    isLiteralFloat(tempToken) -> Token(row, col, pos, Literal.FLOAT, tempToken)
                     tempToken == "'" -> Token(row, col, pos, Literal.CHAR, tempToken)
                     tempToken == "\"" -> Token(row, col, pos, Literal.STRING, tempToken)
                     tempToken == "\n" -> {

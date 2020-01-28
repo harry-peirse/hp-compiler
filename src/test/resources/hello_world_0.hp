@@ -1,8 +1,0 @@
-int main() {
-    putchar('H');
-
-    int[] array = [1,2,3];
-    array[1] = 4;
-
-    return array[0] + array[1];
-}

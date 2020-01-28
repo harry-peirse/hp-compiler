@@ -1,9 +1,9 @@
 package hps.c
 
-import hps.Lexer
-import hps.atomicInt
-import org.junit.jupiter.api.Assertions.assertEquals
+import hps.*
+import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.DynamicTest
+import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestFactory
 import org.junit.jupiter.api.extension.ExtensionContext
 import org.junit.jupiter.api.io.TempDir
@@ -21,14 +21,14 @@ import java.util.stream.Stream
 
 class TestArgumentProvider : ArgumentsProvider {
     override fun provideArguments(context: ExtensionContext?): Stream<out Arguments> {
-        return Stream.of(
-            Arguments.of(1, "int main() { return 1; }"),
-            Arguments.of(2, "int main() { if(1) return 2; else return 3; }"),
-            Arguments.of(3, "int main() { if(0) return 2; else return 3; }"),
-            Arguments.of(4, "int main() { int a = 4; return a; }"),
-            Arguments.of(5, "int main() { int a = 4; a += 1; return a; }"),
-            Arguments.of(6, "int main() { int a = 4; { int a = 2; } a = a + 2; return a; }"),
-            Arguments.of(7, "int main() { int a = 4; { a = 5; } a = a + 2; return a; }")
+        return Stream.of(// args[0]: expected result code, args[1]: expected standard out string, args[2]: code to compile
+            Arguments.of(1, "", "int main() { return 1; }"),
+            Arguments.of(2, "", "int main() { if(1) return 2; else return 3; }"),
+            Arguments.of(3, "", "int main() { if(0) return 2; else return 3; }"),
+            Arguments.of(4, "", "int main() { int a = 4; return a; }"),
+            Arguments.of(5, "", "int main() { int a = 4; a += 1; return a; }"),
+            Arguments.of(6, "", "int main() { int a = 4; { int a = 2; } a = a + 2; return a; }"),
+            Arguments.of(7, "", "int main() { int a = 4; { a = 5; } a = a + 2; return a; }")
         )
     }
 }
@@ -43,39 +43,32 @@ class Tests {
 
     @ParameterizedTest
     @ArgumentsSource(TestArgumentProvider::class)
-    fun testParameters(expectedOutput: Int, inputString: String, @TempDir tempDir: Path) {
+    fun testParameters(expectedStatus: Int, expectedStdOut: String, inputString: String, @TempDir tempDir: Path) {
         val int = atomicInt.incrementAndGet()
         File("./build/test$int.hp").writeText(inputString)
         val output = compileAndRun("./build/test$int.hp", tempDir)
-        assertEquals(expectedOutput, output)
+        assertEquals(expectedStatus, output.first)
+        assertEquals(expectedStdOut, output.second)
     }
 
     @TestFactory
     fun testFiles(@TempDir tempDir: Path) = fileSource()?.map { file ->
         DynamicTest.dynamicTest(file.path) {
-            val resultStatus = compileAndRun(file.path, tempDir)
+            val output = compileAndRun(file.path, tempDir)
             val expectedStatus = file.path.split("_").last().split(".").first().toInt()
-            assertEquals(expectedStatus, resultStatus)
+            val expectedStdOut = file.name.split("_")[1]
+            assertEquals(expectedStatus, output.first)
+            assertEquals(expectedStdOut, output.second)
         }
     }
 
-    private fun compileAndRun(filename: String, outputPath: Path): Int {
-        println("Program input:")
-        println(File(filename).readText() + "\n")
-
+    private fun compileAndRun(filename: String, outputPath: Path): Pair<Int, String> {
         val tokens = Lexer().lex(filename)
-        println("Lexical Analysis:")
-        println(tokens.joinToString("\n") { it.prettyPrint() } + "\n")
-
         val parser = Ast()
-        val ast = parser.parseProgram(tokens)
-        println("Parsed AST:")
-        println("${ast}\n")
-
-        val c = ast.toC()
-        println("Generated C:")
+        val program = parser.parseProgram(tokens)
+        val c = Validator().validate(program)
         var lineNumber = 1
-        println(c.split("\n").joinToString("\n") { "%3d $it".format(lineNumber++) } + "\n")
+        println(c.split("\n").joinToString("\n") { "%4d    $it".format(lineNumber++) } + "\n")
 
         val fileNameWithoutExtension =
             outputPath.toString() + '\\' + filename.removeSuffix(".hp").split("\\").last().split("/").last()
@@ -87,32 +80,29 @@ class Tests {
         File(cFileName).writeText(c)
 
         File(executableFileName).takeIf { it.exists() }?.delete()
-        val processBuilder1 = ProcessBuilder("gcc", "-m32", "-g", cFileName, "-o", fileNameWithoutExtension)
-        processBuilder1.redirectErrorStream(true)
-        val process1 = processBuilder1.start()
-        val bufferedReader1 = BufferedReader(InputStreamReader(process1.inputStream))
-        var line1 = bufferedReader1.readLine()
-        while (line1 != null) {
-            println(line1)
-            line1 = bufferedReader1.readLine()
+        val gccOutput = runProcess("gcc", "-g", cFileName, "-o", fileNameWithoutExtension)
+        println("GCC exit status is $gccOutput\n")
+
+        val runtimeOutput = runProcess(executableFileName)
+        println("\nOutput is: $runtimeOutput\n")
+
+        return runtimeOutput
+    }
+
+    private fun runProcess(vararg args: String): Pair<Int, String> {
+        val processBuilder = ProcessBuilder(args.asList())
+        processBuilder.redirectErrorStream(true)
+        processBuilder.redirectOutput(ProcessBuilder.Redirect.PIPE)
+
+        val process = processBuilder.start()
+        val bufferedReader = BufferedReader(InputStreamReader(process.inputStream))
+        var output = ""
+        var line = bufferedReader.readLine()
+        while (line != null) {
+            output += line
+            line = bufferedReader.readLine()
         }
-        println("GCC exit status is ${process1.waitFor()}\n")
 
-        val processBuilder2 = ProcessBuilder(executableFileName)
-        processBuilder2.redirectErrorStream(true)
-
-        processBuilder2.redirectOutput(ProcessBuilder.Redirect.INHERIT)
-        val process2 = processBuilder2.start()
-        val bufferedReader2 = BufferedReader(InputStreamReader(process1.inputStream))
-        var line2 = bufferedReader2.readLine()
-        while (line2 != null) {
-            println(line2)
-            line2 = bufferedReader2.readLine()
-        }
-
-        val status = process2.waitFor()
-        println("\nOutput is: $status\n")
-
-        return status
+        return process.waitFor() to output
     }
 }
