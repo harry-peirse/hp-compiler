@@ -100,6 +100,7 @@ class Tests {
         var line = bufferedReader.readLine()
         while (line != null) {
             output += line
+            println(line)
             line = bufferedReader.readLine()
         }
 

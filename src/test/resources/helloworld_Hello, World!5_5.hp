@@ -19,10 +19,7 @@ int main() {
     array[1] = 4;
 
     putchar('\n');
+    putchar('0' + array[0] + array[1]);
 
-    int result = array[0] + array[1];
-
-    putchar('0' + result);
-
-    return result;
+    return array[0] + array[1];
 }
