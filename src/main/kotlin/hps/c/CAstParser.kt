@@ -24,24 +24,27 @@ sealed class CCode {
     sealed class Function : CCode() {
 
         abstract val type: Token
+        abstract val isArray: Boolean
         abstract val name: Token
         abstract val arguments: List<Argument>
 
         data class Implementation(
             override val type: Token,
+            override val isArray: Boolean,
             override val name: Token,
             override val arguments: List<Argument>,
             val blockItems: List<BlockItem>
         ) : Function() {
 
             override fun toC() =
-                "${type.value} ${name.value}(${arguments.joinToString(", ") { it.toC() }})\n{\n${blockItems.joinToString(
+                "${type.value}${if (isArray) "*" else ""} ${name.value}(${arguments.joinToString(", ") { it.toC() }})\n{\n${blockItems.joinToString(
                     "\n"
                 ) { it.toC() }}\n}\n"
         }
 
         data class External(
             override val type: Token,
+            override val isArray: Boolean,
             override val name: Token,
             override val arguments: List<Argument>
         ) : Function() {
@@ -208,14 +211,16 @@ sealed class CCode {
             override fun flattened() = listOf(this)
         }
 
-        data class ArrayConstant(val type: Token, val values: List<Expression>) :
+        data class ArrayConstant(val values: List<Expression>, var type: String) :
             Expression() {
-            override fun toC() = "{${values.joinToString(", ") { it.toC() }}}"
+            override fun toC() = "($type[]){${values.joinToString(", ") { it.toC() }}}"
             override fun flattened() = values.flatMap { it.flattened() } + this
         }
 
         data class Unary(val unaryOp: Token, val expression: Expression, val postfix: Boolean) : Expression() {
-            override fun toC() = if(postfix) "(${expression.toC()}${unaryOp.value})" else "(${unaryOp.value}${expression.toC()})"
+            override fun toC() =
+                if (postfix) "(${expression.toC()}${unaryOp.value})" else "(${unaryOp.value}${expression.toC()})"
+
             override fun flattened() = expression.flattened() + this
         }
 
@@ -225,7 +230,9 @@ sealed class CCode {
             val secondExpression: Expression
         ) :
             Expression() {
-            override fun toC() = "(${firstExpression.toC()}${binaryOp.value}${secondExpression.toC()})"
+            override fun toC() = "(${firstExpression.toC()}${binaryOp.value
+                .replace("and", "&&")
+                .replace("or", "||")}${secondExpression.toC()})"
             override fun flattened() = firstExpression.flattened() + secondExpression.flattened() + this
         }
 
@@ -284,9 +291,8 @@ sealed class CCode {
         data class FunctionCall(val name: Token, val arguments: List<Expression>, var isConstructor: Boolean = false) :
             Expression() {
             override fun toC() =
-                if (isConstructor) "{${arguments.joinToString(", ") { it.toC() }}}" else "${name.value}(${arguments.joinToString(
-                    ", "
-                ) { it.toC() }})"
+                if (isConstructor) "(${name.value}){${arguments.joinToString(", ") { it.toC() }}}"
+                else "${name.value}(${arguments.joinToString(", ") { it.toC() }})"
 
             override fun flattened() = arguments.flatMap { it.flattened() } + this
         }
@@ -296,21 +302,25 @@ sealed class CCode {
 class Ast {
 
     private fun parseArguments(tokens: Queue<Token>): List<Argument> {
-        assert(tokens.poll().type == Symbol.OPEN_PARENTHESIS)
         val arguments = mutableListOf<Argument>()
-        while (tokens.peek().type != Symbol.CLOSE_PARENTHESIS) {
-            val argumentType = tokens.poll()
-            assert(argumentType.type.isType)
-            val isArray = if (tokens.peek().type == Symbol.OPEN_SQUARE_BRACKET) {
-                tokens.poll()
-                assert(tokens.poll().type == Symbol.CLOSE_SQUARE_BRACKET)
-                true
-            } else false
-            val argumentName = tokens.poll()
-            arguments.add(Argument(argumentType, argumentName, isArray))
-            if (tokens.peek().type == Symbol.COMMA) tokens.poll()
+        if (tokens.peek().type == Symbol.OPEN_PARENTHESIS) {
+            tokens.poll()
+            while (tokens.peek().type != Symbol.CLOSE_PARENTHESIS) {
+                val argumentName = tokens.poll()
+                assert(argumentName.type == IDENTIFIER)
+                assert(tokens.poll().type == Symbol.COLON)
+                val argumentType = tokens.poll()
+                assert(argumentType.type.isType)
+                val isArray = if (tokens.peek().type == Symbol.OPEN_SQUARE_BRACKET) {
+                    tokens.poll()
+                    assert(tokens.poll().type == Symbol.CLOSE_SQUARE_BRACKET)
+                    true
+                } else false
+                arguments.add(Argument(argumentType, argumentName, isArray))
+                if (tokens.peek().type == Symbol.COMMA) tokens.poll()
+            }
+            assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
         }
-        assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
         return arguments
     }
 
@@ -339,20 +349,52 @@ class Ast {
             tokens.poll()
             true
         } else false
-        val returnType = tokens.poll()
-        assert(returnType.type.isType)
+
         val name = tokens.poll()
         assert(name.type == IDENTIFIER)
+        assert(tokens.poll().type == Symbol.DOUBLE_COLON)
+
+        val hasBrackets = tokens.peek().type == Symbol.OPEN_PARENTHESIS
         val arguments = parseArguments(tokens)
-        return if (!external) {
-            assert(tokens.poll().type == Symbol.OPEN_BRACE)
-            val blockItems = mutableListOf<BlockItem>()
-            while (tokens.peek().type != Symbol.CLOSE_BRACE) {
-                blockItems.add(parseBlockItem(tokens))
+
+        val returnType = when {
+            hasBrackets && tokens.peek().type == Symbol.MINUS_RIGHT_ARROW -> {
+                tokens.poll()
+                tokens.poll()
             }
-            assert(tokens.poll().type == Symbol.CLOSE_BRACE)
-            Function.Implementation(returnType, name, arguments, blockItems)
-        } else Function.External(returnType, name, arguments)
+            tokens.peek().type.isType -> {
+                tokens.poll()
+            }
+            else -> {
+                name.copy(type = Keyword.VOID, value = "void")
+            }
+        }
+        assert(returnType.type.isType)
+        val isArray = if (tokens.peek().type == Symbol.OPEN_SQUARE_BRACKET) {
+            tokens.poll()
+            assert(tokens.poll().type == Symbol.CLOSE_SQUARE_BRACKET)
+            true
+        } else false
+
+        return if (!external) {
+            val blockItems = mutableListOf<BlockItem>()
+            if (tokens.peek().type == Symbol.EQUALS) {
+                tokens.poll()
+                val blockItem = parseBlockItem(tokens)
+                if (returnType.type != Keyword.VOID && blockItem is BlockItem.Statement.ProxyExpression) {
+                    blockItems.add(BlockItem.Statement.Return(blockItem.expression))
+                } else {
+                    blockItems.add(blockItem)
+                }
+            } else {
+                assert(tokens.poll().type == Symbol.OPEN_BRACE)
+                while (tokens.peek().type != Symbol.CLOSE_BRACE) {
+                    blockItems.add(parseBlockItem(tokens))
+                }
+                assert(tokens.poll().type == Symbol.CLOSE_BRACE)
+            }
+            Function.Implementation(returnType, isArray, name, arguments, blockItems)
+        } else Function.External(returnType, isArray, name, arguments)
     }
 
     private fun parseBlockItem(tokens: Queue<Token>): BlockItem {
@@ -361,7 +403,7 @@ class Ast {
             Keyword.RETURN -> {
                 tokens.poll()
                 val result = BlockItem.Statement.Return(parseExpression(tokens))
-                assert(tokens.poll().type == Symbol.SEMICOLON)
+                if (tokens.peek().type == Symbol.SEMICOLON) tokens.poll()
                 result
             }
             Keyword.INT, Keyword.FLOAT, Keyword.CHAR -> {
@@ -373,14 +415,14 @@ class Ast {
                 } else false
                 val variableName = tokens.poll()
                 assert(variableName.type == IDENTIFIER)
-                val expression = if (tokens.peek().type == Symbol.ASSIGN) {
+                val expression = if (tokens.peek().type == Symbol.EQUALS) {
                     tokens.poll()
                     parseExpression(tokens)
                 } else null
                 val result =
                     if (pointer) BlockItem.ArrayDeclaration(token, variableName, expression)
                     else BlockItem.Declaration(token, variableName, expression)
-                assert(tokens.poll().type == Symbol.SEMICOLON)
+                if (tokens.peek().type == Symbol.SEMICOLON) tokens.poll()
                 result
             }
             Keyword.IF -> {
@@ -451,13 +493,13 @@ class Ast {
             Keyword.BREAK -> {
                 tokens.poll()
                 val result = BlockItem.Statement.Break
-                assert(tokens.poll().type == Symbol.SEMICOLON)
+                if (tokens.peek().type == Symbol.SEMICOLON) tokens.poll()
                 result
             }
             Keyword.CONTINUE -> {
                 tokens.poll()
                 val result = BlockItem.Statement.Continue
-                assert(tokens.poll().type == Symbol.SEMICOLON)
+                if (tokens.peek().type == Symbol.SEMICOLON) tokens.poll()
                 result
             }
             IDENTIFIER -> {
@@ -478,14 +520,14 @@ class Ast {
                     } else false
                     val variableName = tokens.poll()
                     assert(variableName.type == IDENTIFIER)
-                    val expression = if (tokens.peek().type == Symbol.ASSIGN) {
+                    val expression = if (tokens.peek().type == Symbol.EQUALS) {
                         tokens.poll()
                         parseExpression(tokens)
                     } else null
                     val result =
                         if (pointer) BlockItem.ArrayDeclaration(token, variableName, expression)
                         else BlockItem.Declaration(token, variableName, expression)
-                    assert(tokens.poll().type == Symbol.SEMICOLON)
+                    if (tokens.peek().type == Symbol.SEMICOLON) tokens.poll()
                     result
                 } else {
                     (tokens as ArrayDeque).apply {
@@ -494,13 +536,13 @@ class Ast {
                         push(first)
                     }
                     val result = BlockItem.Statement.ProxyExpression(parseExpression(tokens))
-                    assert(tokens.poll().type == Symbol.SEMICOLON)
+                    if (tokens.peek().type == Symbol.SEMICOLON) tokens.poll()
                     result
                 }
             }
             else -> {
                 val result = BlockItem.Statement.ProxyExpression(parseExpression(tokens))
-                assert(tokens.poll().type == Symbol.SEMICOLON)
+                if (tokens.peek().type == Symbol.SEMICOLON) tokens.poll()
                 result
             }
         }
@@ -511,7 +553,7 @@ class Ast {
         return when {
             token.type == IDENTIFIER -> {
                 tokens.poll()
-                if(tokens.peek().type.isPostfix) {
+                if (tokens.peek().type.isPostfix) {
                     Expression.Unary(tokens.poll(), Expression.Constant(token), true)
                 } else if (tokens.peek().type.isAssignment) {
                     val assignmentToken = tokens.poll()
@@ -545,7 +587,7 @@ class Ast {
                     }
                 }
                 tokens.poll()
-                Expression.ArrayConstant(token, values)
+                Expression.ArrayConstant(values, "char") // TODO: don't assume all arrays are chars!!!
             }
             token.type is Literal -> {
                 tokens.poll()

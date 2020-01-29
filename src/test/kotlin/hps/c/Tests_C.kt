@@ -22,13 +22,13 @@ import java.util.stream.Stream
 class TestArgumentProvider : ArgumentsProvider {
     override fun provideArguments(context: ExtensionContext?): Stream<out Arguments> {
         return Stream.of(// args[0]: expected result code, args[1]: expected standard out string, args[2]: code to compile
-            Arguments.of(1, "", "int main() { return 1; }"),
-            Arguments.of(2, "", "int main() { if(1) return 2; else return 3; }"),
-            Arguments.of(3, "", "int main() { if(0) return 2; else return 3; }"),
-            Arguments.of(4, "", "int main() { int a = 4; return a; }"),
-            Arguments.of(5, "", "int main() { int a = 4; a += 1; return a; }"),
-            Arguments.of(6, "", "int main() { int a = 4; { int a = 2; } a = a + 2; return a; }"),
-            Arguments.of(7, "", "int main() { int a = 4; { a = 5; } a = a + 2; return a; }")
+            Arguments.of(1, "", "main :: int { return 1; }"),
+            Arguments.of(2, "", "main :: int { if(1) return 2; else return 3; }"),
+            Arguments.of(3, "", "main :: int { if(0) return 2; else return 3; }"),
+            Arguments.of(4, "", "main :: int { int a = 4; return a; }"),
+            Arguments.of(5, "", "main :: int { int a = 4; a += 1; return a; }"),
+            Arguments.of(6, "", "main :: int { int a = 4; { int a = 2; } a = a + 2; return a; }"),
+            Arguments.of(7, "", "main :: int { int a = 4; { a = 5; } a = a + 2; return a; }")
         )
     }
 }

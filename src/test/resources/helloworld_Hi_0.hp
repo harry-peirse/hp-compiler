@@ -1,0 +1,23 @@
+external putchar :: (c: char)
+
+struct String (contents: char[], length: int)
+
+print :: (string: String) {
+    for(int i = 0; i < string.length; i++) {
+        putchar(string.contents[i])
+    }
+}
+
+println :: (string: String) {
+    print(string)
+    putchar('\n')
+}
+
+main :: int {
+    print(String(get_raw_string(), 2))
+    return 0
+}
+
+get_raw_string :: char[] {
+    return ['H', 'i']
+}

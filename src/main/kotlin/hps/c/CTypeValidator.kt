@@ -48,7 +48,7 @@ class Validator {
             }
 
         return imports + "\n\n" + functionsToForwardDeclare.joinToString("") {
-            "${it.type.value} ${it.name.value}(${it.arguments.joinToString(
+            "${it.type.value}${if(it.isArray) "*" else ""} ${it.name.value}(${it.arguments.joinToString(
                 ", "
             ) { arg -> "${arg.type.value} ${arg.name.value}" }});\n\n"
         } + program.toC()
