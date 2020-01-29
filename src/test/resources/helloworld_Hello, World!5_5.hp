@@ -17,7 +17,7 @@ void println(char[] string) {
 int main() {
     print("Hello, ");
     println("World!");
-    print("...newline?");
+    print("5");
 
     return 5;
 }
