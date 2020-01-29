@@ -1,25 +1,23 @@
 external void putchar(char c)
 
-int main() {
-    putchar('H');
-    putchar('e');
-    putchar('l');
-    putchar('l');
-    putchar('o');
-    putchar(',');
-    putchar(' ');
-    putchar('W');
-    putchar('o');
-    putchar('r');
-    putchar('l');
-    putchar('d');
-    putchar('!');
+void print(char[] string) {
+    int i = -1;
+    char c = string[++i];
+    while(c != 0) {
+        putchar(c);
+        c = string[++i];
+    }
+}
 
-    int[] array = [1,2,3];
-    array[1] = 4;
-
+void println(char[] string) {
+    print(string);
     putchar('\n');
-    putchar('0' + array[0] + array[1]);
+}
 
-    return array[0] + array[1];
+int main() {
+    print("Hello, ");
+    println("World!");
+    print("...newline?");
+
+    return 5;
 }

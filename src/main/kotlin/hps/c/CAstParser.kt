@@ -8,12 +8,17 @@ import java.util.*
 sealed class CCode {
     abstract fun toC(): String
 
-    data class Program(val functions: List<Function>) : CCode() {
-        override fun toC() = functions.joinToString("\n") { it.toC() }
+    data class Program(val structs: List<Struct>, val functions: List<Function>) : CCode() {
+        override fun toC() = structs.joinToString("\n") { it.toC() } + "\n" + functions.joinToString("\n") { it.toC() }
     }
 
-    data class Argument(val type: Token, val name: Token) : CCode() {
-        override fun toC(): String = "${type.value} ${name.value}"
+    data class Argument(val type: Token, val name: Token, val isArray: Boolean) : CCode() {
+        override fun toC(): String = "${type.value}${if (isArray) "*" else ""} ${name.value}"
+    }
+
+    data class Struct(val name: Token, val arguments: List<Argument>) : CCode() {
+        override fun toC() =
+            "typedef struct ${name.value}_\n{\n${arguments.joinToString("\n") { "\t${it.toC()};" }}\n} ${name.value};"
     }
 
     sealed class Function : CCode() {
@@ -196,6 +201,7 @@ sealed class CCode {
         data class Constant(val value: Token) : Expression() {
             override fun toC() = when (value.type) {
                 Literal.CHAR -> "'${value.value}'"
+                Literal.STRING -> "\"${value.value}\""
                 else -> value.value
             }
 
@@ -275,8 +281,13 @@ sealed class CCode {
             override fun flattened() = listOf(this)
         }
 
-        data class FunctionCall(val name: Token, val arguments: List<Expression>) : Expression() {
-            override fun toC() = "${name.value}(${arguments.joinToString(", ") { it.toC() }})"
+        data class FunctionCall(val name: Token, val arguments: List<Expression>, var isConstructor: Boolean = false) :
+            Expression() {
+            override fun toC() =
+                if (isConstructor) "{${arguments.joinToString(", ") { it.toC() }}}" else "${name.value}(${arguments.joinToString(
+                    ", "
+                ) { it.toC() }})"
+
             override fun flattened() = arguments.flatMap { it.flattened() } + this
         }
     }
@@ -284,12 +295,43 @@ sealed class CCode {
 
 class Ast {
 
+    private fun parseArguments(tokens: Queue<Token>): List<Argument> {
+        assert(tokens.poll().type == Symbol.OPEN_PARENTHESIS)
+        val arguments = mutableListOf<Argument>()
+        while (tokens.peek().type != Symbol.CLOSE_PARENTHESIS) {
+            val argumentType = tokens.poll()
+            assert(argumentType.type.isType)
+            val isArray = if (tokens.peek().type == Symbol.OPEN_SQUARE_BRACKET) {
+                tokens.poll()
+                assert(tokens.poll().type == Symbol.CLOSE_SQUARE_BRACKET)
+                true
+            } else false
+            val argumentName = tokens.poll()
+            arguments.add(Argument(argumentType, argumentName, isArray))
+            if (tokens.peek().type == Symbol.COMMA) tokens.poll()
+        }
+        assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
+        return arguments
+    }
+
     fun parseProgram(tokens: Queue<Token>): Program {
         val functions = mutableListOf<Function>()
+        val structs = mutableListOf<Struct>()
         do {
-            functions.add(parseFunction(tokens))
+            if (tokens.peek().type == Keyword.STRUCT) {
+                structs.add(parseStruct(tokens))
+            } else {
+                functions.add(parseFunction(tokens))
+            }
         } while (tokens.peek().type != EOF)
-        return Program(functions)
+        return Program(structs, functions)
+    }
+
+    private fun parseStruct(tokens: Queue<Token>): Struct {
+        assert(tokens.poll().type == Keyword.STRUCT)
+        val name = tokens.poll()
+        assert(name.type == IDENTIFIER)
+        return Struct(name, parseArguments(tokens))
     }
 
     private fun parseFunction(tokens: Queue<Token>): Function {
@@ -301,25 +343,16 @@ class Ast {
         assert(returnType.type.isType)
         val name = tokens.poll()
         assert(name.type == IDENTIFIER)
-        assert(tokens.poll().type == Symbol.OPEN_PARENTHESIS)
-        val arguments = mutableListOf<Argument>()
-        while (tokens.peek().type != Symbol.CLOSE_PARENTHESIS) {
-            val argumentType = tokens.poll()
-            assert(argumentType.type.isType)
-            val argumentName = tokens.poll()
-            arguments.add(Argument(argumentType, argumentName))
-            if (tokens.peek().type == Symbol.COMMA) tokens.poll()
-        }
-        assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
-        if (!external) {
+        val arguments = parseArguments(tokens)
+        return if (!external) {
             assert(tokens.poll().type == Symbol.OPEN_BRACE)
             val blockItems = mutableListOf<BlockItem>()
             while (tokens.peek().type != Symbol.CLOSE_BRACE) {
                 blockItems.add(parseBlockItem(tokens))
             }
             assert(tokens.poll().type == Symbol.CLOSE_BRACE)
-            return Function.Implementation(returnType, name, arguments, blockItems)
-        } else return Function.External(returnType, name, arguments)
+            Function.Implementation(returnType, name, arguments, blockItems)
+        } else Function.External(returnType, name, arguments)
     }
 
     private fun parseBlockItem(tokens: Queue<Token>): BlockItem {
@@ -426,6 +459,44 @@ class Ast {
                 val result = BlockItem.Statement.Continue
                 assert(tokens.poll().type == Symbol.SEMICOLON)
                 result
+            }
+            IDENTIFIER -> {
+                val first = tokens.poll()
+                val second = tokens.poll()
+                val third = tokens.poll()
+
+                if ((second.type == IDENTIFIER) || (second.type == Symbol.OPEN_SQUARE_BRACKET && third.type == Symbol.CLOSE_SQUARE_BRACKET && tokens.poll().type == IDENTIFIER)) {
+                    (tokens as ArrayDeque).apply {
+                        push(third)
+                        push(second)
+                    }
+
+                    val pointer = if (tokens.peek().type == Symbol.OPEN_SQUARE_BRACKET) {
+                        tokens.poll()
+                        assert(tokens.poll().type == Symbol.CLOSE_SQUARE_BRACKET)
+                        true
+                    } else false
+                    val variableName = tokens.poll()
+                    assert(variableName.type == IDENTIFIER)
+                    val expression = if (tokens.peek().type == Symbol.ASSIGN) {
+                        tokens.poll()
+                        parseExpression(tokens)
+                    } else null
+                    val result =
+                        if (pointer) BlockItem.ArrayDeclaration(token, variableName, expression)
+                        else BlockItem.Declaration(token, variableName, expression)
+                    assert(tokens.poll().type == Symbol.SEMICOLON)
+                    result
+                } else {
+                    (tokens as ArrayDeque).apply {
+                        push(third)
+                        push(second)
+                        push(first)
+                    }
+                    val result = BlockItem.Statement.ProxyExpression(parseExpression(tokens))
+                    assert(tokens.poll().type == Symbol.SEMICOLON)
+                    result
+                }
             }
             else -> {
                 val result = BlockItem.Statement.ProxyExpression(parseExpression(tokens))

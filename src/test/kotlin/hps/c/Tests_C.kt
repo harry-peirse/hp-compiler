@@ -1,9 +1,9 @@
 package hps.c
 
-import hps.*
-import org.junit.jupiter.api.Assertions.*
+import hps.Lexer
+import hps.atomicInt
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.DynamicTest
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestFactory
 import org.junit.jupiter.api.extension.ExtensionContext
 import org.junit.jupiter.api.io.TempDir
@@ -64,6 +64,7 @@ class Tests {
 
     private fun compileAndRun(filename: String, outputPath: Path): Pair<Int, String> {
         val tokens = Lexer().lex(filename)
+        println(tokens.joinToString("\n") { it.prettyPrint() })
         val parser = Ast()
         val program = parser.parseProgram(tokens)
         val c = Validator().validate(program)

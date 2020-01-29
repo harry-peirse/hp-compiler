@@ -1,0 +1,6 @@
+struct Person(char[] name, int age)
+
+int main() {
+    Person bob = Person(['B'], 21);
+    return 0;
+}
