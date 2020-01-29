@@ -1,11 +1,11 @@
 external void putchar(char c)
 
 void print(char[] string) {
-    int i = -1;
-    char c = string[++i];
+    int i = 0;
+    char c = string[i++];
     while(c != 0) {
         putchar(c);
-        c = string[++i];
+        c = string[i++];
     }
 }
 

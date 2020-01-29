@@ -214,8 +214,8 @@ sealed class CCode {
             override fun flattened() = values.flatMap { it.flattened() } + this
         }
 
-        data class Unary(val unaryOp: Token, val expression: Expression) : Expression() {
-            override fun toC() = "(${unaryOp.value}${expression.toC()})"
+        data class Unary(val unaryOp: Token, val expression: Expression, val postfix: Boolean) : Expression() {
+            override fun toC() = if(postfix) "(${expression.toC()}${unaryOp.value})" else "(${unaryOp.value}${expression.toC()})"
             override fun flattened() = expression.flattened() + this
         }
 
@@ -511,7 +511,9 @@ class Ast {
         return when {
             token.type == IDENTIFIER -> {
                 tokens.poll()
-                if (tokens.peek().type.isAssignment) {
+                if(tokens.peek().type.isPostfix) {
+                    Expression.Unary(tokens.poll(), Expression.Constant(token), true)
+                } else if (tokens.peek().type.isAssignment) {
                     val assignmentToken = tokens.poll()
                     Expression.Assign(token, assignmentToken, parseExpression(tokens))
                 } else if (tokens.peek().type == Symbol.OPEN_PARENTHESIS) {
@@ -551,7 +553,7 @@ class Ast {
             }
             token.type.isUnary -> {
                 tokens.poll()
-                Expression.Unary(token, parseNonBinaryExpression(tokens))
+                Expression.Unary(token, parseNonBinaryExpression(tokens), false)
             }
             token.type == Symbol.OPEN_PARENTHESIS -> {
                 tokens.poll()
