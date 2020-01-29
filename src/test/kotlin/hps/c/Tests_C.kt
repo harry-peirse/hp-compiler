@@ -1,6 +1,8 @@
 package hps.c
 
+import hps.Ast
 import hps.Lexer
+import hps.Validator
 import hps.atomicInt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.DynamicTest

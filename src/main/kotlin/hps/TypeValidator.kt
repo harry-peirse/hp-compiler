@@ -1,16 +1,18 @@
-package hps.c
+package hps
+
+import hps.HPCode.*
 
 class Validator {
 
-    fun validate(program: CCode.Program): String {
+    fun validate(program: Program): String {
         val functionsByName = program.functions.associateBy { it.name.value }
-        val functionsToForwardDeclare = mutableSetOf<CCode.Function.Implementation>()
+        val functionsToForwardDeclare = mutableSetOf<Func.Implementation>()
 
         val structsByName = program.structs.associateBy { it.name.value }
 //        val structsToForwardDeclare = mutableSetOf<CCode.Struct>()
 
         val imports = program.functions
-            .filterIsInstance<CCode.Function.External>()
+            .filterIsInstance<Func.External>()
             .mapNotNull { when(it.name.value) {
                 "putchar" -> "stdio"
                 else -> null
@@ -19,19 +21,19 @@ class Validator {
             .joinToString("\n") { "#include <$it.h>" }
 
         program.functions
-            .filterIsInstance<CCode.Function.Implementation>()
+            .filterIsInstance<Func.Implementation>()
             .flatMap { it.blockItems }
             .flatMap { it.expressions() + it.blockItems().flatMap { bi -> bi.expressions() } }
             .flatMap { it.flattened() }
-            .filterIsInstance<CCode.Expression.FunctionCall>()
+            .filterIsInstance<Expression.FunctionCall>()
             .forEach {
                 if (!structsByName.containsKey(it.name.value)) {
                     if (!functionsByName.containsKey(it.name.value)) {
                         error("Unknown Function call: ${it.name}")
                     }
                     if ((it.name.pos < functionsByName[it.name.value]?.type?.pos ?: error("ERROR")) && functionsByName[it.name.value]
-                            ?: error("ERROR") is CCode.Function.Implementation
-                    ) functionsToForwardDeclare.add(functionsByName[it.name.value] as CCode.Function.Implementation)
+                            ?: error("ERROR") is Func.Implementation
+                    ) functionsToForwardDeclare.add(functionsByName[it.name.value] as Func.Implementation)
                 } else {
                     it.isConstructor = true
                 }
@@ -51,6 +53,6 @@ class Validator {
             "${it.type.value}${if(it.isArray) "*" else ""} ${it.name.value}(${it.arguments.joinToString(
                 ", "
             ) { arg -> "${arg.type.value} ${arg.name.value}" }});\n\n"
-        } + program.toC()
+        } + program.prettyPrint()
     }
 }
