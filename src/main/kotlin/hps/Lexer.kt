@@ -172,7 +172,7 @@ data class Token(
 
 fun isKeyword(value: String) = Keyword.values().map { it.value }.contains(value)
 fun isSymbol(value: String) = Symbol.values().map { it.value }.contains(value)
-fun isIdentifier(value: String) = "^([a-z]|[A-Z]|_|\$)([a-zA-Z0-9]|_|\$)*$".toRegex().matches(value)
+fun isIdentifier(value: String) = "^([a-z]|[A-Z]|_)([a-zA-Z0-9]|_)*$".toRegex().matches(value)
 fun isLiteralInt(value: String) = "^([0-9]+|(0[bB](0-1)+)|(0([0-7])+)|(0[xX]([0-9a-fA-F])+))$".toRegex().matches(value)
 fun isLiteralUnsignedInt(value: String) =
     "^([0-9]+|(0[bB](0-1)+)|(0([0-7])+)|(0[xX]([0-9a-fA-F])+))+([Uu])$".toRegex().matches(value)

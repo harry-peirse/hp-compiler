@@ -1,6 +1,9 @@
 external putchar :: (c: char)
 
-struct String (contents: char[], length: int)
+String :: struct {
+    length: int
+    contents: char[]
+}
 
 print :: (string: String) {
     for(int i = 0; i < string.length; i++) {
@@ -14,10 +17,9 @@ println :: (string: String) {
 }
 
 main :: int {
-    print(String(get_raw_string(), 2))
+    print(get_string())
     return 0
 }
 
-get_raw_string :: char[] {
-    return ['H', 'i']
-}
+get_raw_string :: char[] = ['H', 'i']
+get_string :: String = String(2, get_raw_string())

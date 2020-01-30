@@ -9,7 +9,7 @@ class Validator {
         val functionsToForwardDeclare = mutableSetOf<Func.Implementation>()
 
         val structsByName = program.structs.associateBy { it.name.value }
-//        val structsToForwardDeclare = mutableSetOf<CCode.Struct>()
+        val structsToForwardDeclare = mutableSetOf<Struct>()
 
         val imports = program.functions
             .filterIsInstance<Func.External>()
@@ -42,17 +42,19 @@ class Validator {
         program.structs
             .flatMap { it.arguments }
             .filterNot {
-                listOf("char", "int", "float", "char[]", "int[]", "char[]").contains(it.type.value)
+                listOf("char", "int", "float", "char[]", "int[]", "char[]", "void", "void[]").contains(it.type.value)
             }
             .forEach {
                 if (!structsByName.containsKey(it.type.value)) error("Unknown Struct: ${it.type}")
                 // TODO: Forward declare
             }
 
-        return imports + "\n\n" + functionsToForwardDeclare.joinToString("") {
+        return imports + "\n\n" + program.structs.joinToString(""){
+            "typedef struct ${it.name.value}_ ${it.name.value};\n"
+        } + functionsToForwardDeclare.joinToString("") {
             "${it.type.value}${if(it.isArray) "*" else ""} ${it.name.value}(${it.arguments.joinToString(
                 ", "
-            ) { arg -> "${arg.type.value} ${arg.name.value}" }});\n\n"
-        } + program.prettyPrint()
+            ) { arg -> "${arg.type.value} ${arg.name.value}" }});\n"
+        } + "\n" + program.prettyPrint()
     }
 }

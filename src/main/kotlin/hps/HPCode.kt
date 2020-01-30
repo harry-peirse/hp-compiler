@@ -14,7 +14,7 @@ sealed class HPCode {
 
     data class Struct(val name: Token, val arguments: List<Argument>) : HPCode() {
         override fun prettyPrint() =
-            "typedef struct ${name.value}_\n{\n${arguments.joinToString("\n") { "\t${it.prettyPrint()};" }}\n} ${name.value};"
+            "struct ${name.value}_\n{\n${arguments.joinToString("\n") { "\t${it.prettyPrint()};" }}\n};"
     }
 
     sealed class Func : HPCode() {

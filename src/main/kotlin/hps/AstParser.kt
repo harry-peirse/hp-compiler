@@ -5,22 +5,26 @@ import java.util.*
 
 class Ast {
 
+    private fun parseArgument(tokens: Queue<Token>): Argument {
+        val argumentName = tokens.poll()
+        assert(argumentName.type == IDENTIFIER)
+        assert(tokens.poll().type == Symbol.COLON)
+        val argumentType = tokens.poll()
+        assert(argumentType.type.isType)
+        val isArray = if (tokens.peek().type == Symbol.OPEN_SQUARE_BRACKET) {
+            tokens.poll()
+            assert(tokens.poll().type == Symbol.CLOSE_SQUARE_BRACKET)
+            true
+        } else false
+        return Argument(argumentType, argumentName, isArray)
+    }
+
     private fun parseArguments(tokens: Queue<Token>): List<Argument> {
         val arguments = mutableListOf<Argument>()
         if (tokens.peek().type == Symbol.OPEN_PARENTHESIS) {
             tokens.poll()
             while (tokens.peek().type != Symbol.CLOSE_PARENTHESIS) {
-                val argumentName = tokens.poll()
-                assert(argumentName.type == IDENTIFIER)
-                assert(tokens.poll().type == Symbol.COLON)
-                val argumentType = tokens.poll()
-                assert(argumentType.type.isType)
-                val isArray = if (tokens.peek().type == Symbol.OPEN_SQUARE_BRACKET) {
-                    tokens.poll()
-                    assert(tokens.poll().type == Symbol.CLOSE_SQUARE_BRACKET)
-                    true
-                } else false
-                arguments.add(Argument(argumentType, argumentName, isArray))
+                arguments.add(parseArgument(tokens))
                 if (tokens.peek().type == Symbol.COMMA) tokens.poll()
             }
             assert(tokens.poll().type == Symbol.CLOSE_PARENTHESIS)
@@ -29,35 +33,39 @@ class Ast {
     }
 
     fun parseProgram(tokens: Queue<Token>): Program {
-        val functions = mutableListOf<HPCode.Func>()
+        val functions = mutableListOf<Func>()
         val structs = mutableListOf<Struct>()
         do {
+            val external = if (tokens.peek().type == Keyword.EXTERNAL) {
+                tokens.poll()
+                true
+            } else false
+
+            val name = tokens.poll()
+            assert(name.type == IDENTIFIER)
+            assert(tokens.poll().type == Symbol.DOUBLE_COLON)
+
             if (tokens.peek().type == Keyword.STRUCT) {
-                structs.add(parseStruct(tokens))
+                tokens.poll()
+                if (tokens.peek().type == Symbol.OPEN_BRACE) {
+                    tokens.poll()
+                    val arguments = mutableListOf<Argument>()
+                    while (tokens.peek().type != Symbol.CLOSE_BRACE) {
+                        arguments.add(parseArgument(tokens))
+                    }
+                    tokens.poll()
+                    structs.add(Struct(name, arguments))
+                } else {
+                    structs.add(Struct(name, emptyList()))
+                }
             } else {
-                functions.add(parseFunction(tokens))
+                functions.add(parseFunction(external, name, tokens))
             }
         } while (tokens.peek().type != EOF)
         return Program(structs, functions)
     }
 
-    private fun parseStruct(tokens: Queue<Token>): Struct {
-        assert(tokens.poll().type == Keyword.STRUCT)
-        val name = tokens.poll()
-        assert(name.type == IDENTIFIER)
-        return Struct(name, parseArguments(tokens))
-    }
-
-    private fun parseFunction(tokens: Queue<Token>): HPCode.Func {
-        val external = if (tokens.peek().type == Keyword.EXTERNAL) {
-            tokens.poll()
-            true
-        } else false
-
-        val name = tokens.poll()
-        assert(name.type == IDENTIFIER)
-        assert(tokens.poll().type == Symbol.DOUBLE_COLON)
-
+    private fun parseFunction(external: Boolean, name: Token, tokens: Queue<Token>): Func {
         val hasBrackets = tokens.peek().type == Symbol.OPEN_PARENTHESIS
         val arguments = parseArguments(tokens)
 
@@ -66,7 +74,7 @@ class Ast {
                 tokens.poll()
                 tokens.poll()
             }
-            tokens.peek().type.isType -> {
+            !hasBrackets && tokens.peek().type.isType -> {
                 tokens.poll()
             }
             else -> {
@@ -97,8 +105,8 @@ class Ast {
                 }
                 assert(tokens.poll().type == Symbol.CLOSE_BRACE)
             }
-            HPCode.Func.Implementation(returnType, isArray, name, arguments, blockItems)
-        } else HPCode.Func.External(returnType, isArray, name, arguments)
+            Func.Implementation(returnType, isArray, name, arguments, blockItems)
+        } else Func.External(returnType, isArray, name, arguments)
     }
 
     private fun parseBlockItem(tokens: Queue<Token>): BlockItem {
