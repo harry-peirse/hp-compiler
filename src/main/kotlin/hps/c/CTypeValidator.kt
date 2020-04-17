@@ -1,14 +1,12 @@
 package hps.c
 
-import hps.Ast
-
 data class FunctionSignature(val returnType: String, val name: String, val arguments: List<Pair<String, String>>)
 
 class Validator {
 
     private val functionSignatures = mutableListOf<FunctionSignature>()
 
-    fun validate(program: Ast.Program): String {
+    fun validate(program: CCode.Program): String {
         program.functions.map { func ->
             FunctionSignature(
                 func.type.value,
@@ -19,8 +17,8 @@ class Validator {
 
         return functionSignatures.joinToString("\n") { func ->
             func.run {
-                "${if (returnType == "s64") "int" else returnType} $name(${arguments.joinToString(", ") { args ->
-                    args.run { "${if (first == "s64") "int" else first} $second" }
+                "$returnType $name(${arguments.joinToString(", ") { args ->
+                    args.run { "$first $second" }
                 }});"
             }
         } + "\n\n" + program.toC()
