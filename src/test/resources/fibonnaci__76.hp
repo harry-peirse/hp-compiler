@@ -1,17 +1,17 @@
-int fibonacci(int number) {
+fibonacci :: (number: s64) -> s64 {
     return number == 0 || number == 1
         ? number
-        : fibonacci(number - 1) + fibonacci(number - 2);
+        : fibonacci(number - 1) + fibonacci(number - 2)
 }
 
-int main () { return foo(); }
+main :: { return foo() }
 
-int foo() {
-    int answer = 0;
-    for (int i = 10; i > 0; --i) {
-        if (i == 9) continue;
-        else if (i == 7) break;
-        answer = answer + fibonacci(i);
+foo :: -> s64 {
+    answer: s64 = 0
+    for (i: s64 = 10; i > 0; --i) {
+        if i == 9 continue
+        else if i == 7 break
+        answer = answer + fibonacci(i)
     }
-    return answer;
+    return answer
 }

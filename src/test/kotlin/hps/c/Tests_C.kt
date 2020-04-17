@@ -3,7 +3,6 @@ package hps.c
 import hps.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.DynamicTest
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestFactory
 import org.junit.jupiter.api.extension.ExtensionContext
 import org.junit.jupiter.api.io.TempDir
@@ -22,13 +21,14 @@ import java.util.stream.Stream
 class TestArgumentProvider : ArgumentsProvider {
     override fun provideArguments(context: ExtensionContext?): Stream<out Arguments> {
         return Stream.of(// args[0]: expected result code, args[1]: expected standard out string, args[2]: code to compile
-            Arguments.of(1, "", "int main() { return 1; }"),
-            Arguments.of(2, "", "int main() { if(1) return 2; else return 3; }"),
-            Arguments.of(3, "", "int main() { if(0) return 2; else return 3; }"),
-            Arguments.of(4, "", "int main() { int a = 4; return a; }"),
-            Arguments.of(5, "", "int main() { int a = 4; a += 1; return a; }"),
-            Arguments.of(6, "", "int main() { int a = 4; { int a = 2; } a = a + 2; return a; }"),
-            Arguments.of(7, "", "int main() { int a = 4; { a = 5; } a = a + 2; return a; }")
+            Arguments.of(1, "", "main :: { return 1 }"),
+            Arguments.of(2, "", "main :: () -> s64 { if 1 return 2 else return 3 }"),
+            Arguments.of(3, "", "main :: -> s64 { if 0 return 2 else return 3 }"),
+            Arguments.of(4, "", "main :: () -> s64 { a: s64 = 4 return a }"),
+            Arguments.of(5, "", "main :: () -> s64 { a: s64 = 4 a += 1 return a }"),
+            Arguments.of(6, "", "main :: () -> s64 { a: s64 = 4 { a: s64 = 2 } a = a + 2 return a }"),
+            Arguments.of(7, "", "main :: () -> s64 { a: s64 = 4 { a = 5 } a = a + 2 return a }"),
+            Arguments.of(8, "", "Cat :: struct { age: s64 name: char[5] } main :: () -> s64 { cat: Cat cat.age = 8 return cat.age }")
         )
     }
 }
@@ -64,8 +64,7 @@ class Tests {
 
     private fun compileAndRun(filename: String, outputPath: Path): Pair<Int, String> {
         val tokens = Lexer().lex(filename)
-        val parser = Ast()
-        val program = parser.parseProgram(tokens)
+        val program = Parser.parseProgram(tokens)
         val c = Validator().validate(program)
         var lineNumber = 1
         println(c.split("\n").joinToString("\n") { "%4d    $it".format(lineNumber++) } + "\n")

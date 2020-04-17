@@ -31,7 +31,7 @@ enum class Keyword(override val value: String, override val isType: Boolean = fa
     UNSIGNED("unsigned"),
     VOID("void", true),
     SHORT("short", true),
-    INT("int", true),
+    S64("s64", true),
     LONG("long", true),
     FLOAT("float", true),
     DOUBLE("double", true),
@@ -67,7 +67,7 @@ enum class Symbol(
     SINGLE_QUOTE("'"),
     DOUBLE_QUOTE("\""),
     SEMICOLON(";"),
-    PERIOD("."),
+    PERIOD(".", 1, isBinary = true),
     COMMA(","),
     ARROW("->"),
     DOUBLE_COLON("::"),
@@ -192,7 +192,7 @@ fun isLiteralFloat(value: String) = "^([0-9])+\\.([0-9])+([Ff])$".toRegex().matc
 fun isLiteralDouble(value: String) = "^([0-9])+\\.([0-9])+[Dd]?$".toRegex().matches(value)
 
 class Lexer {
-    fun lex(fileName: String): Queue<Token> {
+    fun lex(fileName: String): ArrayDeque<Token> {
         val fileContent = ArrayDeque(File(fileName).readText().toCharArray().toList())
         val tokens = ArrayDeque<Token>()
 
